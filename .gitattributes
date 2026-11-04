@@ -1,5 +1,6 @@
 * text=auto
 *.patch text eol=lf
+*.patch -whitespace
 *.py text eol=lf
 *.java text eol=lf
 *.cs text eol=lf
