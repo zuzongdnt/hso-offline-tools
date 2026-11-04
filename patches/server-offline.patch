@@ -1,0 +1,1340 @@
+--- a/src/main/java/ai/BossTG.java
++++ b/src/main/java/ai/BossTG.java
+@@ -108,7 +108,7 @@
+ 				      && (this.p.item.wear[14].id >= 4638 && this.p.item.wear[14].id <= 4648)) {
+ 					m.writer().writeByte(this.p.item.wear[14].part);
+ 				} else {
+-					m.writer().writeByte(temp.part);
++					m.writer().writeByte(Service.get_weapon_part(temp));
+ 				}
+ 				m.writer().writeByte(3);
+ 				m.writer().writeShort(-1);
+@@ -140,7 +140,7 @@
+ 		}
+ 		m.writer().writeByte(this.p.fashion.length);
+ 		for (int i = 0; i < this.p.fashion.length; i++) {
+-			m.writer().writeByte(this.p.fashion[i]);
++			m.writer().writeShort(Service.get_fashion_part(this.p.fashion[i]));
+ 		}
+ 		//
+ 		m.writer().writeShort(-1);
+--- a/src/main/java/ai/NhanBan.java
++++ b/src/main/java/ai/NhanBan.java
+@@ -65,7 +65,7 @@
+ 				if (i == 10 && p0.item.wear[14] != null && (p0.item.wear[14].id >= 4638 && p0.item.wear[14].id <= 4648)) {
+ 					temp_add.part = p0.item.wear[14].part;
+ 				} else {
+-					temp_add.part = temp.part;
++					temp_add.part = Service.get_weapon_part(temp);
+ 				}
+ 			}
+ 			this.part_p.add(temp_add);
+@@ -138,7 +138,7 @@
+ 		m.writer().writeByte(-1); // pet
+ 		m.writer().writeByte(this.fashion.length);
+ 		for (int i = 0; i < this.fashion.length; i++) {
+-			m.writer().writeByte(this.fashion[i]);
++			m.writer().writeShort(Service.get_fashion_part(this.fashion[i]));
+ 		}
+ 		//
+ 		m.writer().writeShort(-1);
+--- a/src/main/java/client/Clan.java
++++ b/src/main/java/client/Clan.java
+@@ -479,17 +479,42 @@
+         return (int) ((exp * 1000) / Level.entrys.get(level - 1).exp);
+     }
+ 
++    public static void open_registration(Session conn) throws IOException {
++        if (conn.p.myclan != null) {
++            Service.send_notice_box(conn, "Bạn đã có bang hội.");
++            return;
++        }
++        if (conn.p.is_detu_training) {
++            Service.send_notice_box(conn, "Hãy thoát luyện Đệ Tử trước khi tạo bang hội.");
++            return;
++        }
++        if (conn.p.get_ngoc() < 20000) {
++            Service.send_notice_box(conn, "Cần 20.000 ngọc để tạo bang hội.");
++            return;
++        }
++        Service.send_box_input_text(conn,28,"Tạo bang hội - phí 20.000 ngọc",
++            new String[]{"Tên bang (4-20 ký tự)","Tên viết tắt (3 ký tự, ví dụ ZUZ)"});
++    }
++
+     public synchronized static boolean create_clan(Session conn, String name, String name_shorted) throws IOException {
++        if (conn.p.myclan != null) {
++            Service.send_notice_box(conn, "Bạn đã có bang hội.");
++            return false;
++        }
++        if (conn.p.get_ngoc() < 20000) {
++            Service.send_notice_box(conn, "Cần 20.000 ngọc để tạo bang hội.");
++            return false;
++        }
+         if (conn.p.is_detu_training) {
+             Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tạo bang hội!");
+             return false;
+         }
+         for (Clan clan : entrys) {
+-            if (clan.name_clan.equals(name)) {
++            if (clan.name_clan.equalsIgnoreCase(name)) {
+                 Service.send_notice_box(conn, "Tên này đã tồn tại, xin hãy chọn lại!");
+                 return false;
+             }
+-            if (clan.name_clan_shorted.equals(name_shorted)) {
++            if (clan.name_clan_shorted.equalsIgnoreCase(name_shorted)) {
+                 Service.send_notice_box(conn, "Tên rút gọn này đã tồn tại, xin hãy chọn lại!");
+                 return false;
+             }
+@@ -541,20 +566,31 @@
+         // temp.item_clan.add(it);
+         // }
+         //
++        String query = "INSERT INTO clan (name,name_short,mems,item,level,exp,slogan,rule,notice,vang,kimcuong,max_mem,icon) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
++        try (Connection connection = SQL.gI().getConnection(); PreparedStatement statement = connection.prepareStatement(query)) {
++            statement.setString(1,name);
++            statement.setString(2,name_shorted);
++            statement.setString(3,Clan.flush_mem_json(temp.mems));
++            statement.setString(4,Clan.flush_item_json(temp.item_clan));
++            statement.setInt(5,temp.level);
++            statement.setLong(6,temp.exp);
++            statement.setString(7,temp.slogan);
++            statement.setString(8,temp.rule);
++            statement.setString(9,temp.notice);
++            statement.setLong(10,temp.vang);
++            statement.setInt(11,temp.kimcuong);
++            statement.setInt(12,temp.max_mem);
++            statement.setInt(13,temp.icon);
++            if (statement.executeUpdate() != 1) throw new SQLException("Clan insert did not create one row");
++        } catch (SQLException e) {
++            e.printStackTrace();
++            Service.send_notice_box(conn, "Chưa tạo được bang do lỗi lưu dữ liệu. Chưa trừ ngọc; vui lòng thử lại.");
++            return false;
++        }
++        // Publish membership and charge only after the clan was saved successfully.
+         entrys.add(temp);
+         conn.p.myclan = temp;
+-        String query
+-                = "INSERT INTO `clan` (`name`, `name_short`, `mems`, `item`, `level`, `exp`, `slogan`, `rule`, `notice`, `vang`, `kimcuong`, `max_mem`, `icon`) VALUES ('"
+-                + name + "', '" + name_shorted + "', '" + Clan.flush_mem_json(temp.mems) + "', '"
+-                + Clan.flush_item_json(temp.item_clan) + "', " + temp.level + ", " + temp.exp + ", '" + temp.slogan
+-                + "', '" + temp.rule + "', '" + temp.notice + "', " + temp.vang + ", " + temp.kimcuong + ", "
+-                + temp.max_mem + ", " + temp.icon + ")";
+-        try ( Connection connection = SQL.gI().getConnection();  Statement statement = connection.createStatement();) {
+-            statement.executeUpdate(query);
+-        } catch (SQLException e) {
+-            e.printStackTrace();
+-            return false;
+-        }
++        conn.p.update_ngoc(-20000);
+         MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+         Service.send_char_main_in4(conn.p);
+         return true;
+--- a/src/main/java/client/Disciple.java
++++ b/src/main/java/client/Disciple.java
+@@ -421,7 +421,7 @@
+                 return -1;
+             }
+         }
+-        return -1;
++        return wear == null ? (short) -1 : Service.get_tinh_tu_effect(wear[0]);
+     }
+ 
+     public short get_id_phiphong() {
+@@ -533,7 +533,7 @@
+                 if (i == 10 && this.wear[14] != null && (this.wear[14].id >= 4638 && this.wear[14].id <= 4648)) {
+                     m.writer().writeByte(this.wear[14].part);
+                 } else {
+-                    m.writer().writeByte(temp.part);
++                    m.writer().writeByte(Service.get_weapon_part(temp));
+                 }
+                 m.writer().writeByte(3);
+                 m.writer().writeShort(-1);
+--- a/src/main/java/client/Item.java
++++ b/src/main/java/client/Item.java
+@@ -553,8 +553,14 @@
+         }
+         return result;
+     }
++    public static short normalize_tinh_tu_level(int level) {
++        // Legacy shop items used 10,20,... instead of the native 45,55,... levels.
++        if (level % 10 == 0 && level >= 10 && level <= 100) level += 35;
++        return (short) Math.max(45, Math.min(135, level));
++    }
++
+     public static int get_level_tinh_tu(int i) {
+-		return ((i - 45) / 10 + 1);
++		return ((normalize_tinh_tu_level(i) - 45) / 10 + 1);
+ 	}
+ 
+ }
+--- a/src/main/java/client/MessageHandler.java
++++ b/src/main/java/client/MessageHandler.java
+@@ -371,10 +371,10 @@
+                     }
+                     m22.cleanup();
+                 }
+-                if (conn.p.map.map_id == 48) {
+-                    // weather map dungeon
++                boolean christmasSnow = Manager.gI().event == 1 && conn.p.map.map_id == 1;
++                if (christmasSnow || conn.p.map.map_id == 48) {
+                     Message mw = new Message(76);
+-                    mw.writer().writeByte(4);
++                    mw.writer().writeByte(christmasSnow ? 2 : 4);
+                     mw.writer().writeShort(-1);
+                     mw.writer().writeShort(-1);
+                     conn.addmsg(mw);
+@@ -595,6 +595,7 @@
+ 
+                     p0.set_in4();
+                     conn.p = p0;
++                    core.OfflineRewards.onLogin(p0);
+                     MessageHandler.dataloginmap(conn);
+                 } else {
+                     System.out.println("setup FAILED for player id=" + id_player_login);
+--- a/src/main/java/client/Pet.java
++++ b/src/main/java/client/Pet.java
+@@ -150,6 +150,16 @@
+                 maxdam_ = new int[]{0, 0, 0, 0, 2350, 500, 3, 2000};
+                 break;
+             }
++            case 4622: {
++                temp.icon = 18;
++                temp.type = 6;
++                break;
++            }
++            case 4708: {
++                temp.icon = 30;
++                temp.type = 10;
++                break;
++            }
+             case 4631: {
+                 temp.icon = 24;
+                 temp.type = 8;
+@@ -167,7 +177,7 @@
+                 break;
+             }
+             case 4761: {
+-                temp.icon = 32;
++                temp.icon = 33;
+                 temp.type = 11;
+                 id_ = new byte[]{23, 24, 25, 26, 48, 80, 114, 2}; // chir so
+                 param_ = new int[]{1, 1, 1, 1, 1500, 100, 2, 1000};
+@@ -218,6 +228,9 @@
+         } else if (type == 5) {
+             return 4617;
+ 
++        } else if (type == 6) {
++            return 4622;
++
+         } else if (type == 7) {
+             return 4626;
+ 
+@@ -228,12 +241,15 @@
+             return 4699;
+ 
+         } else if (type == 10) {
++            return 4708;
++
++        } else if (type == 11) {
+             return 4761;
+ 
+-        } else if (type == 11) {
++        } else if (type == 12) {
+             return 4762;
+ 
+-        } else if (type == 12) {
++        } else if (type == 13) {
+             return 4768;
+ 
+         }
+--- a/src/main/java/client/Process_Yes_no_box.java
++++ b/src/main/java/client/Process_Yes_no_box.java
+@@ -853,21 +853,7 @@
+     break;
+ }
+                 case 120: {
+-                    if (conn.p.get_ngoc() < 20000) {
+-                        Service.send_notice_box(conn, "20k ngọc còn không có thì không xứng đáng làm anh hùng!");
+-                        return;
+-                    }
+-                    Message m12 = new Message(-53);
+-                    m12.writer().writeShort(0);
+-                    String[] txt = new String[]{"Tên (4-20 ký tự) :", "Tên viết tắt (3 ký tự) :"};
+-                    m12.writer().writeByte(txt.length);
+-                    for (String string : txt) {
+-                        m12.writer().writeUTF(string);
+-                    }
+-                    m12.writer().writeUTF("Đăng ký bang");
+-                    m12.writer().writeUTF("Bang hội");
+-                    conn.addmsg(m12);
+-                    m12.cleanup();
++                    Clan.open_registration(conn);
+                     break;
+                 }
+                 case 121: {
+--- a/src/main/java/client/TextFromClient.java
++++ b/src/main/java/client/TextFromClient.java
+@@ -38,6 +38,15 @@
+             return;
+         }
+         switch (idnpc) {
++            case 28: {
++                if (size != 2) {
++                    Service.send_notice_box(conn,"Hãy nhập đủ tên bang và tên viết tắt 3 ký tự.");
++                    return;
++                }
++                String[] fields={m2.reader().readUTF(),m2.reader().readUTF()};
++                TextFromClient_2.registerClan(conn,fields);
++                break;
++            }
+             case 23: {
+ 				if (size != 2) {
+ 					return;
+@@ -215,7 +224,8 @@
+                         }
+                         if (limit < 1) {
+                             Service.send_notice_box(conn, "Đã hết lượt dùng giftcode này");
+-                        } else if (conn.p.item.get_bag_able() > 2) {
++                        } else if (conn.p.item.get_bag_able() > 2 ||
++                            ("[]".equals(rs.getString("item3")) && "[]".equals(rs.getString("item4")) && "[]".equals(rs.getString("item7")))) {
+                             boolean spec_ = spec.length > 0;
+                                 for (int i = 0; i < spec.length; i++) {
+                                     if (spec[i].equals(conn.p.name)) {
+@@ -275,7 +285,7 @@
+                             }
+                             jsar.clear();
+                             //
+-                            int vang_up = rs.getInt("vang");
++                            long vang_up = rs.getLong("vang");
+                             int ngoc_up = rs.getInt("ngoc");
+                             conn.p.update_vang(vang_up);
+                             conn.p.update_ngoc(ngoc_up);
+--- a/src/main/java/client/TextFromClient_2.java
++++ b/src/main/java/client/TextFromClient_2.java
+@@ -11,24 +11,39 @@
+ 	public static void process(Session conn, Message m2) throws IOException {
+ 		short type = m2.reader().readShort();
+ 		byte size = m2.reader().readByte();
+-		String[] value = new String[size];
++		if (size < 0 || size > 10) return;
++        String[] value = new String[size];
+ 		for (int i = 0; i < size; i++) {
+ 			value[i] = m2.reader().readUTF();
+ 		}
+ 		switch (type) {
+-			case 0: {
++            case 0: {
++                registerClan(conn,value);
++                break;
++            }
++        }
++    }
++
++    public static void registerClan(Session conn,String[] value) throws IOException {
++        int size=value.length;
++                if (size != 2) {
++                    Service.send_notice_box(conn, "Hãy nhập tên bang và tên viết tắt 3 ký tự.");
++                    return;
++                }
++                value[0] = value[0].trim();
++                value[1] = value[1].trim();
+ 				if (!value[0].equals("") && !value[1].equals("")) {
+ 					// Service.send_notice_box(conn, "Bạn đã đặt tên bang là \"" + value[0] + "\" và tên viết tắt là \""
+ 					// + value[1] + "\" đúng không?\n đang test thôi nên éo có bang đâu kkk :v");
+ 					if (value[0].contains("_") || value[0].contains("-") || value[0].contains("@") || value[0].contains("#")
+ 					      || value[0].contains("^") || value[0].contains("$") || value[0].length() > 20
+ 					      || value[0].length() < 4) {
+-						Service.send_notice_box(conn, "Tên nhập vào không hợp lệ");
++						Service.send_notice_box(conn, "Tên bang cần từ 4 đến 20 ký tự, không dùng ký tự đặc biệt.");
+ 						return;
+ 					}
+ 					Pattern p = Pattern.compile("^[a-zA-Z0-9]{3,3}$");
+ 					if (!p.matcher(value[1]).matches()) {
+-						Service.send_notice_box(conn, "Tên rút gọn nhập vào không hợp lệ");
++						Service.send_notice_box(conn, "Tên viết tắt phải có đúng 3 chữ cái hoặc chữ số (ví dụ ZUZ).");
+ 						return;
+ 					}
+ 					if (conn.p.get_ngoc() < 20000) {
+@@ -41,10 +56,7 @@
+ 						Service.send_notice_box(conn, "Hãy chọn một icon bất kỳ đặt làm biểu tượng");
+ 					}
+ 				} else {
+-					Service.send_notice_box(conn, "bỏ ô trống thì tạo bang cho mày thế éo nào đc hả?");
++					Service.send_notice_box(conn, "Hãy nhập đủ tên bang và tên viết tắt 3 ký tự.");
+ 				}
+-				break;
+-			}
+-		}
+-	}
++    }
+ }
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -887,24 +887,24 @@
+             case 275: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 17;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 111;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }
+              case 251: {
+                 conn.p.item.remove(4, id, 1);
+-                conn.p.type_use_mount = (byte) 17;
+-                conn.p.map.send_mount(conn.p);
++                conn.p.type_use_mount = (byte) 14;
+                 conn.p.id_horse = 69;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }case 268: {
+-                conn.p.type_use_mount = (byte) 17;
+-                conn.p.map.send_mount(conn.p);
++                conn.p.type_use_mount = (byte) 14;
+                 conn.p.id_horse = 69;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -924,8 +924,8 @@
+             case 294: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 116;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -945,8 +945,8 @@
+             case 281: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 115;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -966,8 +966,8 @@
+             case 279: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 114;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -975,8 +975,8 @@
+ 
+             case 317: {
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 115;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -996,8 +996,8 @@
+             case 299: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 22;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 117;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -1017,16 +1017,16 @@
+             case 269: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 15;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 106;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }
+             case 296: {
+                 conn.p.type_use_mount = (byte) 15;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 106;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -1046,8 +1046,8 @@
+             case 301: {
+                 conn.p.item.remove(4, id, 1);
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 121;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+@@ -1066,32 +1066,32 @@
+             }
+             case 313: {
+                 conn.p.type_use_mount = (byte) 22;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 117;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }
+             case 314: {
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 121;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }
+             case 315: {
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 116;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+             }
+             case 316: {
+                 conn.p.type_use_mount = (byte) 20;
+-                conn.p.map.send_mount(conn.p);
+                 conn.p.id_horse = 114;
++                conn.p.map.send_mount(conn.p);
+                 MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+                 Service.send_char_main_in4(conn.p);
+                 break;
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -802,7 +802,9 @@
+ 		// System.out.println(type);
+ 		// System.out.println(id);
+ 		// System.out.println(tem);
+-		if (id != -1 && tem == 7) {
++		if (tem == 3 && (id < 0 || id >= conn.p.item.bag3.length)) return;
++        if (tem == 7 && (id < 0 || id >= ItemTemplate7.item.size())) return;
++        if (id != -1 && tem == 7) {
+ 			byte type_item = ItemTemplate7.item.get(id).getType();
+ 			if (type_item != 54) {
+ 				Service.send_notice_box(conn, "Vật phẩm không hợp lệ!");
+@@ -829,6 +831,8 @@
+ 					}
+ 				} else if (tem == 3) {
+ 					Item3 it_temp = conn.p.item.bag3[id];
++                if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id))
++                    it_temp.level = Item.normalize_tinh_tu_level(it_temp.level);
+ 					if (it_temp != null
+ 					      && (it_temp.id == 4587 || it_temp.id == 4588 || it_temp.id == 4589 || it_temp.id == 4590)
+ 					      && it_temp.tier < 16) {
+@@ -837,11 +841,11 @@
+ 						m_send.writer().writeByte(5);
+ 						for (int i = 5 * (it_temp.id - 4587); i < 5 * (it_temp.id - 4587) + 5; i++) {
+ 							m_send.writer().writeShort(conn.p.medal_create_material[i]);
+-							m_send.writer().writeByte(get_quant_material_medal_upgrade(it_temp.tier));
++							m_send.writer().writeShort(get_quant_material_medal_upgrade(it_temp.tier));
+ 						}
+ 						conn.addmsg(m_send);
+ 						m_send.cleanup();
+-					} else if (it_temp != null && (it_temp.id >= 4656 && it_temp.id <= 4675)
++					} else if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id)
+ 					      && Item.get_level_tinh_tu(it_temp.level) < 10) {
+ 						Message m_send = new Message(-105);
+ 						m_send.writer().writeByte(4);
+@@ -849,7 +853,7 @@
+ 						for (int i = 0; i < conn.p.tinhtu_material.length; i++) {
+ 							m_send.writer().writeShort(conn.p.tinhtu_material[i]);
+ 							m_send.writer()
+-							      .writeByte(get_quant_material_medal_upgrade((byte) Item.get_level_tinh_tu(it_temp.level)));
++							      .writeShort(get_quant_material_medal_upgrade((byte) Item.get_level_tinh_tu(it_temp.level)));
+ 						}
+ 						conn.addmsg(m_send);
+ 						m_send.cleanup();
+@@ -1183,6 +1187,8 @@
+ 					return;
+ 				}
+ 				Item3 it_temp = conn.p.item.bag3[id];
++                if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id))
++                    it_temp.level = Item.normalize_tinh_tu_level(it_temp.level);
+ 				if (it_temp != null
+ 				      && (it_temp.id == 4587 || it_temp.id == 4588 || it_temp.id == 4589 || it_temp.id == 4590)
+ 				      && it_temp.tier < 16) {
+@@ -1272,7 +1278,7 @@
+ 					m.writer().writeByte(temp.getType());
+ 					m.writer().writeShort(temp.getIcon());
+ 					m.writer().writeByte(it_temp.tier); // tier
+-					m.writer().writeShort(1); // level required
++					m.writer().writeShort(it_temp.level); // level required
+ 					m.writer().writeByte(it_temp.color); // color
+ 					m.writer().writeByte(0); // can sell
+ 					m.writer().writeByte(0); // can trade
+@@ -1306,10 +1312,10 @@
+ 						m.cleanup();
+ 					}
+ 					//
+-				} else if (it_temp != null && (it_temp.id >= 4656 && it_temp.id <= 4675)
++				} else if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id)
+ 				      && Item.get_level_tinh_tu(it_temp.level) < 10) {
+ 					for (int i = 0; i < it_temp.op.size(); i++) {
+-						if (it_temp.op.get(i).id == 129) {
++						if (Byte.toUnsignedInt(it_temp.op.get(i).id) == 129) {
+ 							int old_value = it_temp.op.get(i).getParam(0);
+ 						}
+ 					}
+@@ -1337,7 +1343,9 @@
+ 						it_temp.level += 10;
+ 						for (int i = 0; i < it_temp.op.size(); i++) {
+ 							Option op_temp = it_temp.op.get(i);
+-							if (op_temp.getParam(0) < 10_000) {
++							// Socket values are gem template IDs (or -1 for an empty socket), not stats.
++							int optionId = Byte.toUnsignedInt(op_temp.id);
++							if ((optionId < 58 || optionId > 60) && op_temp.getParam(0) < 10_000) {
+ 								int old_value = op_temp.getParam(0);
+ 								op_temp.setParam(old_value + Util.random(10));
+ 							}
+@@ -1356,7 +1364,7 @@
+ 						}
+ 					} else {
+ 						for (int i = 0; i < it_temp.op.size(); i++) {
+-							if (it_temp.op.get(i).id == 129) {
++							if (Byte.toUnsignedInt(it_temp.op.get(i).id) == 129) {
+ 								int old_value = it_temp.op.get(i).getParam(0);
+ 								old_value -= 100;
+ 								if (old_value < 0) {
+@@ -1388,7 +1396,7 @@
+ 					m.writer().writeByte(temp.getType());
+ 					m.writer().writeShort(temp.getIcon());
+ 					m.writer().writeByte(it_temp.tier); // tier
+-					m.writer().writeShort(1); // level required
++					m.writer().writeShort(it_temp.level); // level required
+ 					m.writer().writeByte(it_temp.color); // color
+ 					m.writer().writeByte(0); // can sell
+ 					m.writer().writeByte(0); // can trade
+--- a/src/main/java/core/Manager.java
++++ b/src/main/java/core/Manager.java
+@@ -427,6 +427,7 @@
+         }
+         rs.close();
+         //
++        item7sell = template.ItemSellCoin.configure(item7sell);
+         System.out.println("item loaded!");
+         // load mob temp
+         query = "SELECT * FROM `mobs`;";
+@@ -772,7 +773,7 @@
+                         final String key = sbf.substring(0, j).trim();
+                         final String value = sbf.substring(j + 1).trim();
+                         configMap.put(key, value);
+-                        System.out.println("config: " + key + ": " + value);
++                        System.out.println("config: " + key + ": " + (key.contains("password") ? "[hidden]" : value));
+                     }
+                 }
+                 sbd.setLength(0);
+--- a/src/main/java/core/MenuController.java
++++ b/src/main/java/core/MenuController.java
+@@ -121,7 +121,7 @@
+                 break;
+             }
+             case -4: {// Doubar
+-                menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Thông Tin Boss", "Shop trang bị coin"};
++                menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Thông Tin Boss", "Trang bị và Skin - Vàng", "Thú cưỡi - Vàng"};
+                 break;
+             }
+             case -33: { // da dich chuyen
+@@ -2383,7 +2383,7 @@
+         } else {
+             switch (index) {
+                 case 0: {
+-                    Service.send_box_input_yesno(conn, 120, "Bạn có muốn đăng ký tạo bang với phí là 20.000 ngọc");
++                    Clan.open_registration(conn);
+                     break;
+                 }
+                 default: {
+@@ -3030,23 +3030,10 @@
+                 }
+                 break;
+             }
+-           case 1: {
+-    if (conn.p.diemdanh == 1) {
+-        conn.p.diemdanh = 0;
+-        int ngoc__ = Util.random(100, 1000);
+-         conn.p.update_ngoc(ngoc__);
+-        conn.p.item.char_inventory(5);
+-
+-        // Cộng điểm chúc phúc
+-        conn.p.chucphuc++;
+-        conn.p.update_chucphuc(conn.p.chucphuc);
+-
+-        Service.send_notice_box(conn, "Bạn đã điểm danh thành công, được " + ngoc__ + " ngọc và 1 lần phỉ nhổ");
+-    } else {
+-        Service.send_notice_box(conn, "Bạn đã điểm danh hôm nay rồi");
+-    }
+-    break;
+-}
++            case 1: {
++                OfflineRewards.checkIn(conn.p);
++                break;
++            }
+             case 2: {
+                 Service.send_box_input_text(conn, 5, "Đổi coin sang ngọc", new String[]{"Tỷ lệ 1000 coin = 500 ngọc"});
+                 break;
+@@ -3642,6 +3629,10 @@
+             }
+             case 5: {
+                 Service.send_box_UI(conn, 37);
++                break;
++            }
++            case 6: {
++                Service.send_box_UI(conn, 38);
+                 break;
+             }
+             default: {
+@@ -4718,7 +4709,7 @@
+                 m.writer().writeByte(p.tinhtu_material.length);
+                 for (int i = 0; i < p.tinhtu_material.length; i++) {
+                     m.writer().writeShort(p.tinhtu_material[i]);
+-                    m.writer().writeByte(10);
++                    m.writer().writeShort(10);
+                 }
+                 p.conn.addmsg(m);
+                 m.cleanup();
+--- /dev/null
++++ b/src/main/java/core/OfflineRewards.java
+@@ -0,0 +1,17 @@
++package core;
++import client.Player;
++import java.io.IOException;
++public final class OfflineRewards {
++    public static final long GOLD = 100000000000L;
++    public static final int GEMS = 1000000000;
++    public static void onLogin(Player p) {
++        if (p.get_vang() < GOLD) p.update_vang(GOLD-p.get_vang());
++        p.update_ngoc((long)GEMS-p.get_ngoc());
++    }
++    public static void checkIn(Player p) throws IOException {
++        p.update_vang(GOLD);
++        p.update_ngoc((long)GEMS-p.get_ngoc());
++        p.item.char_inventory(5);
++        Service.send_notice_box(p.conn,"Offline: nhận 100 tỷ vàng, ví đủ 1 tỷ ngọc. Có thể điểm danh tiếp ngay.");
++    }
++}
+--- a/src/main/java/core/ServerManager.java
++++ b/src/main/java/core/ServerManager.java
+@@ -69,7 +69,7 @@
+ 
+     public void run() {
+         try {
+-            this.server = new ServerSocket(Manager.gI().server_port);
++            this.server = new ServerSocket(Manager.gI().server_port, 50, java.net.InetAddress.getByName("127.0.0.1"));
+             System.out.println("Khởi Chạy Trong " + (System.currentTimeMillis() - this.time) + "s");
+             System.out.println();
+             System.out.println("Server Đang Chạy Ở Cổng " + Manager.gI().server_port +"" );
+@@ -108,7 +108,7 @@
+                         Mob_in_map.create_boss();
+                     }
+                     if (min % 7 == 0 && sec == 0) {
+-                        Manager.gI().chatKTGprocess("Bạn Đang Chơi Game Hiệp Sĩ Ong Đất ver.1.2w67 Custom Không Reset Nhân Vật");
++                        Manager.gI().chatKTGprocess("Zuzong Local - may chu rieng tren may tinh");
+                     }
+                     if (min % 11 == 0 && sec == 0) {
+                         Manager.gI().chatKTGprocess("Nhận điểm danh hàng ngày tại NPC Zulu, Đến Top BXH để xem thông tin cá nhân");
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -199,7 +199,7 @@
+         m.writer().writeLong(0);
+         m.writer().writeByte(p.fashion.length);
+         for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeByte(p.fashion[i]);
++            m.writer().writeShort(Service.get_fashion_part(p.fashion[i]));
+         }
+         m.writer().writeByte(3); // nap tien?
+         m.writer().writeShort(p.id_name != -1 ? p.id_name : get_id_mat_na(p)); // id mat na
+@@ -243,12 +243,28 @@
+         return result;
+     }
+ 
++    public static int get_fashion_part(byte part) {
++        return (part == -1 || part == -2) ? part : Byte.toUnsignedInt(part);
++    }
++
++    public static short get_tinh_tu_effect(Item3 weapon) {
++        if (weapon == null || weapon.color < 4 || weapon.id < 4672 || weapon.id > 4675) {
++            return -1;
++        }
++        // Native Tinh Tu visual parts 20..23 use the existing animated assets 61..64.
++        return (short) (weapon.part + 41);
++    }
++
++    public static byte get_weapon_part(Item3 item) {
++        // Animated Tinh Tu replaces the legacy static blade, avoiding two weapons at once.
++        return get_tinh_tu_effect(item) >= 0 ? (byte) -1 : item.part;
++    }
++
+     public static short get_id_weapon(Player p) {
+-        short result = -1;
+         if (p.item.wear[17] != null) {
+-            result = (short) (p.item.wear[17].part + 41);
+-        }
+-        return result;
++            return (short) (p.item.wear[17].part + 41);
++        }
++        return get_tinh_tu_effect(p.item.wear[0]);
+     }
+ 
+     public static short get_id_phiphong(Player p) {
+@@ -415,7 +431,7 @@
+                 if (i == 10 && p.item.wear[14] != null && (p.item.wear[14].id >= 4638 && p.item.wear[14].id <= 4648)) {
+                     m.writer().writeByte(p.item.wear[14].part);
+                 } else {
+-                    m.writer().writeByte(temp.part);
++                    m.writer().writeByte(Service.get_weapon_part(temp));
+                 }
+                 m.writer().writeByte(temp.tier); // plus item (tier)
+                 m.writer().writeShort(temp.level);
+@@ -461,7 +477,7 @@
+         }
+         m.writer().writeByte(p.fashion.length);
+         for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeByte(p.fashion[i]);
++            m.writer().writeShort(Service.get_fashion_part(p.fashion[i]));
+         }
+         p.conn.addmsg(m);
+         m.cleanup();
+@@ -820,29 +836,33 @@
+     }
+ 
+     public static void send_box_UI(Session conn, int type) throws IOException {
++        conn.shopType = type;
+         Message m = new Message(23);
+         switch (type) {
+             case 37: {
+-                m.writer().writeUTF("Cửa hàng trang bị bằng coin");
++                m.writer().writeUTF("Trang bị và thời trang - Vàng");
+                 m.writer().writeByte(1);
+                 m.writer().writeShort(ItemSellCoin.entry.size());
+                 for (int i = 0; i < ItemSellCoin.entry.size(); i++) {
+                     ItemSellCoin temp = ItemSellCoin.entry.get(i);
+                     m.writer().writeShort(temp.id);
+-                    m.writer().writeUTF(ItemTemplate3.item.get(temp.id).getName());
++                    m.writer().writeUTF(ItemTemplate3.item.get(temp.id).getName() + (temp.available() ? "" : " [thiếu hình]"));
+                     m.writer().writeByte(ItemTemplate3.item.get(temp.id).getClazz());
+                     m.writer().writeByte(ItemTemplate3.item.get(temp.id).getType());
+                     m.writer().writeShort(ItemTemplate3.item.get(temp.id).getIcon());
+                     m.writer().writeLong(temp.price);
+-                    m.writer().writeShort(10);
+-                    m.writer().writeByte(0);
+-                    m.writer().writeByte(temp.op.size());
+-                    for (int j = 0; j < temp.op.size(); j++) {
+-                        m.writer().writeByte(temp.op.get(j).id);
+-                        m.writer().writeInt(temp.op.get(j).getParam(0));
+-                    }
++                    m.writer().writeShort(temp.createItem().level);
++                    m.writer().writeByte(temp.color);
++                    temp.createItem().writeItemOptions(m, conn.p.clazz);
+                     m.writer().writeByte(0); // pricetype: 0=coin in coin shop
+                 }
++                break;
++            }
++            case 38: {
++                m.writer().writeUTF("Thú cưỡi - Vàng");
++                m.writer().writeByte(0);
++                m.writer().writeShort(ItemSellCoin.MOUNTS.length);
++                for (short id : ItemSellCoin.MOUNTS) m.writer().writeShort(id);
+                 break;
+             }
+             case 33: {
+@@ -980,15 +1000,15 @@
+                 m.writer().writeByte(5);
+                 //
+                 m.writer().writeShort(conn.p.medal_create_material[0 + 5 * (type - 25)]);
+-                m.writer().writeByte(1);
++                m.writer().writeShort(1);
+                 m.writer().writeShort(conn.p.medal_create_material[1 + 5 * (type - 25)]);
+-                m.writer().writeByte(1);
++                m.writer().writeShort(1);
+                 m.writer().writeShort(conn.p.medal_create_material[2 + 5 * (type - 25)]);
+-                m.writer().writeByte(1);
++                m.writer().writeShort(1);
+                 m.writer().writeShort(conn.p.medal_create_material[3 + 5 * (type - 25)]);
+-                m.writer().writeByte(1);
++                m.writer().writeShort(1);
+                 m.writer().writeShort(conn.p.medal_create_material[4 + 5 * (type - 25)]);
+-                m.writer().writeByte(1);
++                m.writer().writeShort(1);
+                 break;
+             }
+             case 29: {
+@@ -1195,6 +1215,7 @@
+ 
+     public static void send_item7_template(Player p, Message m2) throws IOException {
+         short id = m2.reader().readShort();
++        if (id < 0 || id >= ItemTemplate7.item.size()) return;
+         ItemTemplate7 it7 = ItemTemplate7.item.get(id);
+         Message m = new Message(-106);
+         m.writer().writeShort(it7.getId());
+@@ -1420,9 +1441,13 @@
+         // System.out.println(type);
+         // System.out.println(id);
+         if (type == 1) {
++            if (id < 0 || id >= conn.p.item.bag3.length) {
++                send_notice_box(conn, "Không tìm thấy trứng trong hành trang.");
++                return;
++            }
+             boolean duplicated = false;
+             for (Pet temp : conn.p.mypet) {
+-                if (temp.time_born > System.currentTimeMillis()) {
++                if (temp.is_hatch && temp.time_born > System.currentTimeMillis()) {
+                     duplicated = true;
+                     break;
+                 }
+@@ -1432,7 +1457,7 @@
+                 return;
+             }
+             Item3 it = conn.p.item.bag3[id];
+-            if (it != null) {
++            if (it != null && it.type == 14) {
+                 Pet temp = Pet.get_pet(it.id);
+                 if (temp == null) {
+                     send_notice_box(conn, "có lỗi xảy ra, hãy thử lại sau");
+@@ -1457,12 +1482,15 @@
+                 m.writer().writeByte(it.islock ? 0 : 1);
+                 m.writer().writeByte(it.islock ? 0 : 1);
+                 m.writer().writeByte(0); // op size
+-                m.writer().writeInt((int) ((temp.time_born - System.currentTimeMillis()) / 60000));
++                m.writer().writeInt((int) Math.max(1, (temp.time_born - System.currentTimeMillis() + 59999) / 60000));
+                 m.writer().writeByte(it.islock ? 1 : 0);
+                 conn.addmsg(m);
+                 m.cleanup();
+                 conn.p.item.bag3[id] = null;
+                 conn.p.item.char_inventory(3);
++                send_notice_box(conn, "Đã bắt đầu ấp " + it.name + ". Trứng sẽ nở sau 10 phút.");
++            } else {
++                send_notice_box(conn, "Hãy chọn trứng thú cưng trong hành trang.");
+             }
+         } else if (type == 0) {
+             if (conn.p.detu != null && conn.p.detu.state == client.Disciple.STATE_SUMMONED) {
+@@ -1574,6 +1602,7 @@
+         byte type = m.reader().readByte();
+         short idbuy = m.reader().readShort();
+         int quanity = Short.toUnsignedInt(m.reader().readShort());
++        if (idbuy < 0 || quanity < 1) return;
+         if (p.item.get_bag_able() < 1) {
+             send_notice_nobox_white(p.conn, "Hành trang đầy!!");
+             return;
+@@ -1607,6 +1636,11 @@
+                     }
+                 }
+ 
++                int quant_add_bag = quanity + p.item.total_item_by_id(4, idbuy);
++                if (quant_add_bag > 32000) {
++                    send_notice_box(p.conn, "không thể mua thêm");
++                    return;
++                }
+                 long price = ItemTemplate4.item.get(idbuy).getPrice() * quanity;
+                 if (ItemTemplate4.item.get(idbuy).getPricetype() == 0) {
+                     if (p.get_vang() < price) {
+@@ -1627,11 +1661,6 @@
+                     p.detu.training_ticket_bought_today = true;
+                 }
+ 
+-                int quant_add_bag = quanity + p.item.total_item_by_id(4, idbuy);
+-                if (quant_add_bag > 32000) {
+-                    send_notice_box(p.conn, "không thể mua thêm");
+-                    return;
+-                }
+ 
+                 Item47 itbag = new Item47();
+                 itbag.id = idbuy;
+@@ -1695,6 +1724,7 @@
+                 } else {
+                     long price = 0;
+                     ItemSell3 buffer = null;
++                    if (p.conn.shopType != 37) {
+                     for (ItemSell3[] itsell_3 : Manager.gI().itemsellTB) {
+                         for (ItemSell3 itsell3 : itsell_3) {
+                             if (itsell3.id == idbuy) {
+@@ -1703,6 +1733,7 @@
+                                 break;
+                             }
+                         }
++                    }
+                     }
+                     if (price == 0) {
+                         ItemSellCoin itemsellcoin = null;
+@@ -1713,29 +1744,24 @@
+                             }
+                         }
+                         if (itemsellcoin != null) {
+-                            if (p.update_coin(-itemsellcoin.price)) {
+-                                Item3 itbag = new Item3();
+-                                itbag.id = idbuy;
+-                                itbag.clazz = ItemTemplate3.item.get(idbuy).getClazz();
+-                                itbag.type = ItemTemplate3.item.get(idbuy).getType();
+-                                itbag.level = 10;
+-                                itbag.icon = ItemTemplate3.item.get(idbuy).getIcon();
+-                                itbag.color = itemsellcoin.color;
+-                                itbag.part = ItemTemplate3.item.get(idbuy).getPart();
+-                                itbag.islock = true;
+-                                itbag.name = ItemTemplate3.item.get(idbuy).getName();
+-                                itbag.tier = 0;
+-                                itbag.op = new ArrayList<>();
+-                                for (int i = 0; i < itemsellcoin.op.size(); i++) {
+-                                    itbag.op.add(new Option(itemsellcoin.op.get(i).id, itemsellcoin.op.get(i).getParam(0)));
+-                                }
+-                                itbag.time_use = 0;
+-                                p.item.add_item_bag3(itbag);
+-                                p.item.char_inventory(3);
+-                                send_notice_box(p.conn, "Mua thành công " + ItemTemplate3.item.get(idbuy).getName());
+-                            } else {
+-                                send_notice_box(p.conn, "Không đủ " + itemsellcoin.price + " coin");
++                            if (!itemsellcoin.available()) {
++                                send_notice_box(p.conn, "Skin này thiếu tài nguyên hiển thị trong bản game hiện tại.");
++                                return;
+                             }
++                            long total = (long) itemsellcoin.price * quanity;
++                            if (quanity > p.item.get_bag_able()) {
++                                send_notice_box(p.conn, "Không đủ ô hành trang.");
++                                return;
++                            }
++                            if (p.get_vang() < total) {
++                                send_notice_box(p.conn, "Không đủ " + total + " vàng");
++                                return;
++                            }
++                            p.update_vang(-total);
++                            for (int index = 0; index < quanity; index++) p.item.add_item_bag3(itemsellcoin.createItem());
++                            p.item.char_inventory(3);
++                            p.item.char_inventory(5);
++                            send_notice_box(p.conn, "Mua thành công " + ItemTemplate3.item.get(idbuy).getName());
+                         }
+                         return;
+                     }
+@@ -1821,6 +1847,11 @@
+                 if (idbuy > (ItemTemplate7.item.size() - 1)) {
+                     return;
+                 }
++                int quant_add_bag = quanity + p.item.total_item_by_id(7, idbuy);
++                if (quant_add_bag > 32000) {
++                    send_notice_box(p.conn, "không thể mua thêm");
++                    return;
++                }
+                 long price = ItemTemplate7.item.get(idbuy).getPrice() * quanity;
+                 if (ItemTemplate7.item.get(idbuy).getPricetype() == 0) {
+                     if (p.get_vang() < price) {
+@@ -1834,11 +1865,6 @@
+                         return;
+                     }
+                     p.update_ngoc(-price);
+-                }
+-                int quant_add_bag = quanity + p.item.total_item_by_id(7, idbuy);
+-                if (quant_add_bag > 32000) {
+-                    send_notice_box(p.conn, "không thể mua thêm");
+-                    return;
+                 }
+                 Item47 itbag = new Item47();
+                 itbag.id = idbuy;
+--- a/src/main/java/core/SQL.java
++++ b/src/main/java/core/SQL.java
+@@ -14,7 +14,7 @@
+     private final String pass;
+ 
+     public SQL() {
+-		url = "jdbc:mysql://" + Manager.gI().mysql_host + ":3306/" + Manager.gI().mysql_database
++		url = "jdbc:mysql://" + Manager.gI().mysql_host + ":33317/" + Manager.gI().mysql_database
+ 		      + "?autoReconnect=true&useUnicode=yes&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true";
+ 		System.out.println(url);
+ 		user = Manager.gI().mysql_user;
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -449,7 +449,7 @@
+                             && (p0.item.wear[14].id >= 4638 && p0.item.wear[14].id <= 4648)) {
+                         m.writer().writeByte(p0.item.wear[14].part);
+                     } else {
+-                        m.writer().writeByte(temp.part);
++                        m.writer().writeByte(Service.get_weapon_part(temp));
+                     }
+                     m.writer().writeByte(3);
+                     m.writer().writeShort(-1);
+@@ -481,7 +481,7 @@
+             }
+             m.writer().writeByte(p0.fashion.length);
+             for (int i = 0; i < p0.fashion.length; i++) {
+-                m.writer().writeByte(p0.fashion[i]);
++                m.writer().writeShort(Service.get_fashion_part(p0.fashion[i]));
+             }
+             //
+             m.writer().writeShort(-1);
+--- a/src/main/java/io/Session.java
++++ b/src/main/java/io/Session.java
+@@ -59,6 +59,7 @@
+     private final MessageHandler controller;
+     public Player p;
+     public String[] list_char;
++    public int shopType = -1;
+     public byte zoomlv;
+     public byte status = 1;
+     public boolean get_in4;
+@@ -207,6 +208,7 @@
+                                 // }
+                                 // stop service
+                                 Manager.gI().close();
++                                System.exit(0); // Exit after saving and invoke the SQL shutdown hook.
+                             }
+                         }).start();
+                     } else if (m.cmd == -40) {
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -328,7 +328,7 @@
+                 if (this.map_id == 50) { // pet_manager
+                     long now_time = System.currentTimeMillis();
+                     for (Pet temp : p.mypet) {
+-                        if (temp.is_hatch && temp.time_born < now_time) {
++                        if (temp.is_hatch && temp.time_born <= now_time) {
+                             temp.is_hatch = false;
+                             //
+                             Message m = new Message(44);
+@@ -339,13 +339,13 @@
+                             m.writer().writeByte(3);
+                             int dem = 0;
+                             for (Pet temp2 : p.mypet) {
+-                                if (temp.is_hatch && temp2.time_born > now_time) {
++                                if (temp2.is_hatch && temp2.time_born > now_time) {
+                                     dem++;
+                                 }
+                             }
+                             m.writer().writeByte(dem);
+                             for (Pet temp2 : p.mypet) {
+-                                if (temp.is_hatch && temp2.time_born > now_time) {
++                                if (temp2.is_hatch && temp2.time_born > now_time) {
+                                     int id_ = Pet.get_id(temp2.type);
+                                     m.writer().writeUTF(ItemTemplate3.item.get(id_).getName());
+                                     m.writer().writeByte(4); // clazz
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1566,7 +1566,7 @@
+                     if (i == 10 && p0.item.wear[14] != null && (p0.item.wear[14].id >= 4638 && p0.item.wear[14].id <= 4648)) {
+                         m.writer().writeByte(p0.item.wear[14].part);
+                     } else {
+-                        m.writer().writeByte(temp.part);
++                        m.writer().writeByte(Service.get_weapon_part(temp));
+                     }
+                     m.writer().writeByte(3);
+                     m.writer().writeShort(-1);
+@@ -1598,7 +1598,7 @@
+             }
+             m.writer().writeByte(p0.fashion.length);
+             for (int i = 0; i < p0.fashion.length; i++) {
+-                m.writer().writeByte(p0.fashion[i]);
++                m.writer().writeShort(Service.get_fashion_part(p0.fashion[i]));
+             }
+             //
+             m.writer().writeShort(p0.id_henshin);
+--- a/src/main/java/template/Item3.java
++++ b/src/main/java/template/Item3.java
+@@ -89,13 +89,13 @@
+ 		}
+ 		int count = 0;
+ 		for (Option o : this.op) {
+-			if (o != null && !isHiddenElementalOption(o.id, playerClazz)) {
++			if (o != null && ((type == 15 || (type >= 21 && type <= 27)) || !isHiddenElementalOption(o.id, playerClazz))) {
+ 				count++;
+ 			}
+ 		}
+ 		m.writer().writeByte(count);
+ 		for (Option o : this.op) {
+-			if (o != null && !isHiddenElementalOption(o.id, playerClazz)) {
++			if (o != null && ((type == 15 || (type >= 21 && type <= 27)) || !isHiddenElementalOption(o.id, playerClazz))) {
+ 				m.writer().writeByte(o.id);
+ 				m.writer().writeInt(o.getParam(this.tier));
+ 			}
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -144,4 +144,179 @@
+ 			ItemSellCoin.entry.add(temp);
+ 		}
+ 	}
++
++    public static final short[] LEVEL5_GEMS = {27,32,38,43,356,361,366,371,376,381,386,391,396,401,406,411,416};
++    public static final short[] MOUNTS = {62,63,64,65,66,70,71,72,73,74,124,125,146,159,160,161,163,222,223,246,247,248,250,251,268,269,270,275,276,279,280,281,282,294,295,296,299,300,301,302,313,314,315,316,317};
++    private static final java.util.Set<Integer> MISSING_VISUALS = java.util.Set.of(
++        3606,4705,4749,4750,4751,4752,4771,4772,4773,4774,4775,4776,4777,4778,4779);
++
++    public boolean available() {
++        return !MISSING_VISUALS.contains((int) id);
++    }
++
++    private static boolean cosmetic(int type) {
++        return type == 15 || (type >= 21 && type <= 27);
++    }
++
++    public Item3 createItem() {
++        ItemTemplate3 template = ItemTemplate3.item.get(id);
++        Item3 item = new Item3();
++        item.id = id;
++        item.name = template.getName();
++        item.clazz = template.getClazz();
++        item.type = template.getType();
++        item.level = (short) (isTinhTu(id) ? 45 : 10);
++        item.icon = template.getIcon();
++        item.color = color;
++        item.part = template.getPart();
++        item.islock = true;
++        item.op = new ArrayList<>();
++        for (Option option : op) item.op.add(new Option(option.id, option.getParam(0)));
++        return item;
++    }
++
++    public static short[] configure(short[] materialIds) {
++        java.util.Map<Short, ItemSellCoin> offers = new java.util.LinkedHashMap<>();
++        for (ItemSellCoin offer : entry) offers.putIfAbsent(offer.id, offer);
++        for (ItemTemplate3 template : ItemTemplate3.item) {
++            if (cosmetic(template.getType()) && !offers.containsKey(template.getId())) {
++                ItemSellCoin offer = new ItemSellCoin();
++                offer.id = template.getId();
++                offer.price = template.getType() == 27 ? 200000 : 400000;
++                offer.op = new ArrayList<>();
++                offers.put(offer.id, offer);
++            }
++        }
++        int[][] hidden = {{4664,154,299,143,299},{4656,147,299,145,299},
++            {4660,148,299,146,299},{4671,152,299,153,60000},
++            {4668,167,299,165,60000},{4669,170,299,152,299},
++            {4672,155,299,143,299},{4670,169,60000,151,299}};
++        for (ItemSellCoin offer : offers.values()) {
++            ItemTemplate3 template = ItemTemplate3.item.get(offer.id);
++            java.util.Map<Integer, Integer> options = new java.util.LinkedHashMap<>();
++            if (cosmetic(template.getType())) {
++                offer.color = (byte) (template.getType() == 27 ? 4 : 5);
++                for (Option option : cosmeticOptions(template))
++                    options.put(Byte.toUnsignedInt(option.id), option.getParam(0));
++            } else {
++                for (Option option : offer.op) options.merge(Byte.toUnsignedInt(option.id), option.getParam(0), Math::max);
++                if ((offer.id >= 4656 && offer.id <= 4675) || (offer.id >= 4780 && offer.id <= 4788)) {
++                    offer.color = 4;
++                    int element = template.getClazz() == 0 ? 9 : template.getClazz() == 1 ? 11 : template.getClazz() == 2 ? 8 : 10;
++                    if (template.getType() == 2) {
++                        for (int id = 7; id <= 13; id++) options.remove(id);
++                        options.put(element,3500);
++                    }
++                    options.put(129,10000);
++                    int base = offer.id;
++                    if (offer.id >= 4656 && offer.id <= 4667) base = 4656 + (offer.id - 4656) / 4 * 4;
++                    if (offer.id >= 4672 && offer.id <= 4675) base = 4672;
++                    if (offer.id >= 4780 && offer.id <= 4782) base = 4668;
++                    if (offer.id >= 4783 && offer.id <= 4785) base = 4669;
++                    if (offer.id >= 4786 && offer.id <= 4788) base = 4671;
++                    for (int[] row : hidden) if (row[0] == base) {
++                        options.put(row[1],row[2]);
++                        options.put(row[3],row[4]);
++                    }
++                }
++                if (template.getType() == 16) offer.color = 4;
++                if (template.getType() == 14) offer.color = 0;
++                if (offer.id == 2940) offer.color = 5;
++            }
++            offer.op = new ArrayList<>();
++            for (java.util.Map.Entry<Integer,Integer> option : options.entrySet())
++                offer.op.add(new Option(option.getKey(),option.getValue()));
++        }
++        entry = new ArrayList<>(offers.values());
++        for (short id : MOUNTS) {
++            ItemTemplate4 mount = ItemTemplate4.item.get(id);
++            mount.setPricetype((byte)0);
++            boolean permanent = id == 248 || id == 250 || id == 268 || id == 296 || id >= 313;
++            boolean bundle = id == 70 || id == 71 || id == 72 || id == 73 || id == 74 ||
++                id == 125 || id == 223 || id == 247 || id == 270 || id == 276 || id == 280 ||
++                id == 282 || id == 295 || id == 300 || id == 302;
++            mount.setPrice(permanent ? 1000000L : bundle ? 9900000L : 100000L);
++        }
++        java.util.Set<Short> materials = new java.util.LinkedHashSet<>();
++        for (short id : materialIds) materials.add(id);
++        // Native medal materials: level 1 occupies IDs 46 through 145.
++        for (short id = 46; id <= 145; id++) materials.add(id);
++        for (short id : LEVEL5_GEMS) {
++            materials.add(id);
++            ItemTemplate7 gem = ItemTemplate7.item.get(id);
++            gem.setPricetype((byte)0);
++            gem.setPrice(id >= 382 && id <= 411 ? 100000L : 50000L);
++        }
++        short[] result = new short[materials.size()];
++        int index = 0;
++        for (short id : materials) result[index++] = id;
++        return result;
++    }
++
++    public static boolean isTinhTu(int id) {
++        return (id >= 4656 && id <= 4675) || (id >= 4780 && id <= 4788);
++    }
++
++    public static List<Option> cosmeticOptions(ItemTemplate3 template) {
++        // Official administrator screenshots: forum topic 6364555, pages 0 and 1.
++        String data = null;
++        switch (template.getId()) {
++            case 3602: case 3603: case 3604: case 3605:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[62,10000]]"; break;
++            case 3607: case 3608:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[63,5000]]"; break;
++            case 3611: case 3612:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[66,1000]]"; break;
++            case 3613: case 3614: case 4627: case 4628: case 4630:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500]]"; break;
++            case 4591: case 4592:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[87,500],[88,5000]]"; break;
++            case 3615: case 4618:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[69,5000]]"; break;
++            case 4654: case 4655:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[128,500]]"; break;
++            case 4696: case 4697:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[37,1]]"; break;
++            case 4698:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[62,10000],[63,5000]]"; break;
++            case 4711:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[37,1],[108,1]]"; break;
++            case 4714: case 4715:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[27,3000]]"; break;
++            case 4740:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[27,1000],[28,1000],[122,10000]]"; break;
++            case 4741:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[15,1500],[62,10000]]"; break;
++            case 4742: case 4743:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[69,5000],[108,1]]"; break;
++            case 4744: case 4745:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[180,1000]]"; break;
++            case 4749: case 4751:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[62,10000],[69,5000]]"; break;
++            case 4750: case 4752:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,3000],[69,5000]]"; break;
++            case 4763: case 4764:
++                data = "[[7,2000],[8,2000],[9,2000],[10,2000],[11,2000],[27,1500],[128,500]]"; break;
++            case 4758: case 4759: case 4760:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,2000],[185,500],[186,500]]"; break;
++            case 4753: case 4754: case 4756:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,3000]]"; break;
++            case 4769: case 4771:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,1500],[28,1500],[62,10000]]"; break;
++            case 4770: case 4772:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,1500],[28,1500],[122,10000]]"; break;
++            case 4637:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,1000],[28,1000],[69,2000]]"; break;
++        }
++        List<Option> result = new ArrayList<>();
++        if (data == null) {
++            for (Option option : template.getOp()) result.add(new Option(option.id, option.getParam(0)));
++        } else {
++            for (Object row : (JSONArray) JSONValue.parse(data)) {
++                JSONArray pair = (JSONArray) row;
++                result.add(new Option(((Number) pair.get(0)).intValue(), ((Number) pair.get(1)).intValue()));
++            }
++        }
++        return result;
++    }
+ }

@@ -1,0 +1,13 @@
+port: 19139
+debug: false
+mysql-host: 127.0.0.1
+mysql-user: hso_offline
+mysql-password: REPLACE_WITH_YOUR_LOCAL_PASSWORD
+mysql-database: hso_offline
+indexRes: 60
+indexCharPar: -22031
+exp: 1
+lvmax: 200
+allow_ip_client: 10
+time_login: 0
+event: 1
