@@ -31,16 +31,19 @@ with sqlite3.connect(database) as db:
             definitions.append(definition)
         if len(primary)>1:definitions.append('PRIMARY KEY ('+','.join('"'+x+'"' for x in primary)+')')
         db.execute('CREATE TABLE "'+table+'" ('+','.join(definitions)+')')
-        if table in private and not a.include_private_save:continue
+        if table in private and not a.include_private_save and table!='player':continue
         fields=','.join(('HEX(`'+c[0]+'`)' if binary[i] else '`'+c[0]+'`') for i,c in enumerate(cols))
         rows=[]
-        for line in sql('SELECT JSON_ARRAY('+fields+') FROM `'+table+'`;').splitlines():
+        # id=-1 is the server's world-boss template, not a player save. Startup needs it.
+        where=' WHERE `id` = -1' if table=='player' and not a.include_private_save else ''
+        for line in sql('SELECT JSON_ARRAY('+fields+') FROM `'+table+'`'+where+';').splitlines():
             row=json.loads(line)
             for i,b in enumerate(binary):
                 if b and row[i] is not None:row[i]=bytes.fromhex(row[i])
             rows.append(row)
         if rows:db.executemany('INSERT INTO "'+table+'" VALUES ('+','.join('?' for _ in cols)+')',rows)
     db.commit();assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+db.close()
 with zipfile.ZipFile(a.out/'offline-world.zip','w',zipfile.ZIP_DEFLATED) as archive:
     archive.write(database,'hso.sqlite')
     config=a.config.read_text(encoding='utf-8-sig')

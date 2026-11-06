@@ -7,6 +7,7 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 - `patches/server-offline.patch`: các thay đổi trên server Java, gồm shop, Tinh Tú, pet và thưởng Zulu.
 - `android/src`: server SQLite trong ứng dụng, lớp tương thích JDBC, khởi động và tự lưu.
 - `pc/ClientPatcher`: sửa kết nối client PC về `127.0.0.1:19139`, danh sách Offline và thư mục lưu riêng.
+- `java-j2me`: [bản Java offline dành cho J2ME Loader trên Android 13+](java-j2me/README.md), dùng client online v403 và nhúng cùng bộ xử lý thế giới vào JAR.
 - `scripts`: chuẩn bị server, xuất thế giới cục bộ, sửa APK và build Android.
 - `tests`: kiểm tra gói tin, mua đồ bằng vàng, nâng Tinh Tú và ấp trứng.
 
@@ -55,7 +56,7 @@ Từ database cục bộ của bạn và thư mục tài nguyên server:
 python scripts/export_world.py --mysql inputs/mariadb.exe --defaults inputs/database-client.ini --database hso_offline --data inputs/data --config inputs/hso.conf --out build/world
 ```
 
-Mặc định không xuất tài khoản, nhân vật, clan, giftcode hoặc lịch sử thanh toán. Nếu muốn giữ tài khoản/nhân vật của chính bạn để chơi, thêm `--include-private-save`; khi đó chỉ giữ file world/APK kết quả ở nơi riêng tư. Bản xuất không có tài khoản cần được bạn khởi tạo tài khoản theo schema của server trước khi đăng nhập. Công cụ không gửi dữ liệu lên Internet.
+Mặc định không xuất tài khoản, nhân vật của người chơi, clan, giftcode hoặc lịch sử thanh toán. Mẫu boss hệ thống `player.id=-1` được giữ vì server cần để khởi động. Nếu muốn giữ tài khoản/nhân vật của chính bạn để chơi, thêm `--include-private-save`; khi đó chỉ giữ file world/APK kết quả ở nơi riêng tư. Bản xuất không có tài khoản cần được bạn khởi tạo tài khoản theo schema của server trước khi đăng nhập; bản Java tự tạo tài khoản offline riêng. Công cụ không gửi dữ liệu lên Internet.
 
 ## Build Android từ APK v403b của bạn
 
