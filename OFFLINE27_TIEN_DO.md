@@ -1,6 +1,6 @@
 # HSO Offline 27: bản thử server
 
-Nguồn nền: JAR server trong bộ cài PC 26 trùng SHA-256 với `build/server-offline23/target/HSO_Re_2-1.0-jar-with-dependencies.jar`. JAR phát hành nằm tại `build/server-offline27-release/target/HSO_Re_2-1.0-jar-with-dependencies.jar`. Đã đóng gói APK Android và ZIP cập nhật PC riêng; chưa thay file trong bộ cài đang dùng, chưa mở hoặc sửa database nhân vật, chưa tạo IPA 27.
+Nguồn nền: JAR server trong bộ cài PC 26 trùng SHA-256 với `build/server-offline23/target/HSO_Re_2-1.0-jar-with-dependencies.jar`. JAR phát hành nằm tại `build/server-offline27-release/target/HSO_Re_2-1.0-jar-with-dependencies.jar`. Đã đóng gói APK Android, ZIP cập nhật PC và IPA iOS chưa ký; chưa thay file trong bộ cài PC đang dùng và chưa mở hoặc sửa database nhân vật.
 
 ## Đã làm
 
@@ -20,7 +20,7 @@ Nguồn nền: JAR server trong bộ cài PC 26 trùng SHA-256 với `build/serv
 - Giảm giá nguyên liệu mề đay cấp 3; đối chiếu chỉ số mề đay từ Mở Ly; cơ chế ẩn thân và các hiệu ứng mề đay khác.
 - Mê cung: các map 74-79 có sẵn trong dữ liệu nền nhưng chưa có vòng chơi 5 phút, vé, cửa canh, thùng và Đèn Thần.
 - Chiến trường: bot người chơi các phe, xác minh cân bằng chỉ số trong trận và kiểm tra luồng kết thúc/nhận quà.
-- Kiểm tra gameplay trực tiếp trên client PC/iPhone và trang phục Hiệp sĩ Mộng Mơ khi cưỡi thú.
+- Kiểm tra gameplay trực tiếp trên client PC/iPhone và trang phục Hiệp sĩ Mộng Mơ khi cưỡi thú. IPA 27 đã ghép với thư viện arm64 từ workflow iOS; chưa thử trên iPhone thật theo yêu cầu của người dùng.
 
 ## Kiểm tra đã chạy
 

@@ -8,6 +8,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--version', type=int, required=True)
 parser.add_argument('--pc', type=Path, required=True)
 parser.add_argument('--android', type=Path, required=True)
+parser.add_argument('--ios', type=Path)
 parser.add_argument('--out', type=Path, required=True)
 args = parser.parse_args()
 if args.out.exists():
@@ -15,7 +16,10 @@ if args.out.exists():
 tag = f'offline-{args.version}'
 base = f'https://github.com/zuzongdnt/hso-offline-tools/releases/download/{tag}/'
 manifest = {'version': args.version, 'tag': tag}
-for platform, path in (('pc', args.pc), ('android', args.android)):
+platforms = [('pc', args.pc), ('android', args.android)]
+if args.ios is not None:
+    platforms.append(('ios', args.ios))
+for platform, path in platforms:
     digest = hashlib.sha256()
     with path.open('rb') as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b''):
