@@ -43,6 +43,12 @@ public class Offline28Check {
         ItemTemplate3 costume=ItemTemplate3.item.get(4100);costume.setType((byte)15);
         ItemSellCoin offer=new ItemSellCoin();offer.id=4100;offer.color=5;offer.op=new ArrayList<>();ItemSellCoin.entry.add(offer);
         Buyer buyer=new Buyer(new Capture());buyer.point_active[2]=299;
+        Item3 hair=new Item3();hair.id=4870;hair.type=25;hair.part=127;buyer.item.wear[16]=hair;
+        check(core.Service.get_id_hair(buyer)==168,"Gold hair effect mapping");
+        hair.id=4871;hair.part=(byte)130;
+        check(core.Service.get_id_hair(buyer)==171,"Red hair signed part mapping");
+        Item3 mask=new Item3();mask.id=4872;mask.type=21;mask.part=(byte)150;buyer.item.wear[13]=mask;
+        check(core.Service.get_id_mat_na(buyer)==191,"Ice mask signed part mapping");
         core.ArenaShop.show(buyer,0);core.ArenaShop.select(buyer,1);
         check(buyer.item.bag3[0]==null && buyer.point_active[2]==299,"Insufficient points consumed or awarded an item");
         buyer.point_active[2]=300;core.ArenaShop.select(buyer,1);
