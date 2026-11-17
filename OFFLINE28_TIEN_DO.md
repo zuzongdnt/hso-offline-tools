@@ -12,6 +12,7 @@
 - Đối chiếu ảnh người dùng: Mặt nạ đọa đày có Phòng thủ 5%, Máu 10%, Không tăng Exp 100%; Áo choàng Công tước có năm dòng sát thương, Máu, Mana đều 10%. Áp lại cho đồ đã lưu khi tải nhân vật.
 - Về làng: mục tại NPC bảng xếp hạng hoặc chat `/velang`. Trong Lôi đài thì rời trận; khi đang ở phó bản/chiến trường cần rời hoạt động trước.
 - PC: bỏ giới hạn ở lệnh đặt FPS và xóa khóa đường đi khi nhận map. Chưa đo FPS/CPU trên máy người dùng; không tuyên bố đã hết lag.
+- Theo xác nhận của người dùng, nhập skin gậy mã 174 từ cache của bản đang mở vào phần hiển thị gậy 4869: giữ đủ 144 khung hoạt ảnh gốc, tạo đủ bốn độ phóng đại và icon từ cùng tài nguyên. Các chỉ số của món giữ cấu hình hiện có; chưa triển khai proc Quáng Tuyết.
 
 ## Kiểm tra
 
@@ -23,7 +24,7 @@
 
 ## Còn thiếu hoặc chưa xác minh
 
-- Chưa bổ sung mọi skin mới của game gốc. Hai ảnh icon không có tên chưa đủ để xác định chắc chắn toàn bộ món hoặc mã hiệu ứng cây gậy.
+- Chưa bổ sung mọi skin mới của game gốc. Đã xác nhận trực tiếp Áo choàng Công tước và người dùng xác nhận mã 174 là skin gậy. Cache hiện có 66 bộ hiệu ứng và 15 ảnh pet đã tải; trong năm mã hiệu ứng chưa có offline, một mã là logo, bốn mã còn lại là ngoại hình. Chưa gán tên/chỉ số cho các ngoại hình và pet mới chỉ dựa vào file ảnh.
 - Chưa xác minh toàn bộ chỉ số mề +15 với bản gốc. Số `0s` trước đó là sai đơn vị hiển thị; Body vốn có chuyển giá trị giây nhỏ thành mili giây lúc kích hoạt.
 - Danh sách Top thi đấu hiện là danh sách bot offline, chưa có mùa thi đấu và bảng điểm bot lưu lâu dài.
 - Linh thú hoàn chỉnh, toàn bộ hiệu ứng ngọc (gồm đỏ Hấp Thụ), mê cung và mở rộng chiến trường vẫn chưa hoàn thành. Chiến trường được người dùng cho để sau.
