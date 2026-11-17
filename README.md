@@ -13,6 +13,14 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 
 Repo không chứa client/tài nguyên game, database nhân vật, tài khoản thật hoặc khóa ký APK. Cần chuẩn bị các đầu vào đó ở máy của bạn trong thư mục `inputs/` đã được bỏ qua bởi Git.
 
+## Offline 29
+
+[Chi tiết bản 29 và phạm vi kiểm tra](OFFLINE29_TIEN_DO.md). Sửa cập nhật PC và khôi phục tài khoản; thêm shop Lôi đài có icon với 10 skin, bot cao nhất cấp 139, hiệu ứng ngọc và sự kiện Đứa Bé/đệ tử. `/velang` về làng, `/detu` tìm Đứa Bé và mở lựa chọn nhận.
+
+Chuẩn bị server bằng `python scripts/stage_offline29.py --source build/server-offline28-extra --out build/server-offline29`. PC dùng `pc/RepairPatcher` với DLL bản 27. Tài nguyên bản 29 dùng `scripts/package_offline29_assets.py` trên gói tài nguyên bản 28 và thư mục `part_char/imgver` của client gốc; ngọc và tọa độ thú cưỡi được cập nhật khi cài gói.
+
+iOS dùng `scripts/prepare_ios_server.py` để tạo thư mục nguồn từ server 29, rồi đẩy thư mục nguồn đó lên nhánh `offline29-build` của repo build riêng. Chạy `gh workflow run build.yml --repo zuzongdnt/hso-ios-offline-build --ref offline29-build -f runner=macos-26`; có thể chọn `runner=macos-15` nếu GitHub hết máy Mac 26. Tải artifact `ios-offline-world` rồi ghép IPA bằng `scripts/build_ios_ipa.py` với `--build 17 --dream-fashion`, IPA gốc và hai gói world/cosmetics riêng tư. IPA chưa ký; ký và cài đè bằng iLoader để giữ dữ liệu.
+
 ## Offline 28
 
 Chi tiết sửa và các phần còn thiếu ở [OFFLINE28_TIEN_DO.md](OFFLINE28_TIEN_DO.md). Mrs Oda có shop skin bằng điểm; NPC bảng xếp hạng có danh sách bot, Top thi đấu và Về làng. Có thể chat `/velang`. PC mặc định không giới hạn FPS.

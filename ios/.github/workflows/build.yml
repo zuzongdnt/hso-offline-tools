@@ -1,9 +1,18 @@
 name: Build iOS offline world
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: 'macOS runner (use macos-15 if macos-26 has no capacity)'
+        type: choice
+        required: true
+        default: macos-26
+        options:
+          - macos-26
+          - macos-15
 jobs:
   world:
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 45
     permissions:
       contents: read
