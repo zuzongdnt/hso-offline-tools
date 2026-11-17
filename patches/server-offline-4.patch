@@ -1,0 +1,1091 @@
+--- a/src/main/java/client/Body.java
++++ b/src/main/java/client/Body.java
+@@ -633,9 +633,14 @@
+         for (int i = 0; i < p.item.wear.length; i++) {
+             Item3 temp = p.item.wear[i];
+             if (temp != null) {
++                boolean tinhTu = template.ItemSellCoin.isTinhTu(temp.id);
++                int requested = Byte.toUnsignedInt(byteId);
+                 for (Option op : temp.op) {
+-                    if ((op.id == optionId || op.id == byteId || Byte.toUnsignedInt(op.id) == optionId)
+-                            && op.getParam(temp.tier) > maxParam) {
++                    int id = Byte.toUnsignedInt(op.id);
++                    boolean hidden = tinhTu && template.TinhTu.isHidden(id);
++                    boolean matches = hidden ? template.TinhTu.activeOption(id) == template.TinhTu.activeOption(requested)
++                            && template.TinhTu.groupIsComplete(p.item.wear, i) : id == requested;
++                    if (matches && op.getParam(temp.tier) > maxParam) {
+                         maxParam = op.getParam(temp.tier);
+                     }
+                 }
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -125,6 +125,52 @@
+     public byte typepk;
+     public int pointpk;
+     public byte[] skill_point;
++    private final byte[] skillUpgrade = new byte[2];
++    private int pendingSkillUpgrade = -1;
++
++    public int getSkillUpgrade(int index) {
++        return !is_detu_training && (index == 19 || index == 20) ? skillUpgrade[index - 19] : 0;
++    }
++
++    public JSONArray savedSkillPoints() {
++        JSONArray values = new JSONArray();
++        byte[] points = is_detu_training ? main_skill_point : skill_point;
++        for (byte point : points) values.add(point);
++        if (skillUpgrade[0] != 0 || skillUpgrade[1] != 0) {
++            values.add(skillUpgrade[0]);
++            values.add(skillUpgrade[1]);
++        }
++        return values;
++    }
++
++    private boolean canUpgradeSkill(int index) {
++        return !isdie && !is_detu_training && (index == 19 || index == 20)
++                && skill_point[index] > 0
++                && skill_point[index] == skills[index].mLvSkill.length - 5
++                && getSkillUpgrade(index) < 10;
++    }
++
++    private int skillBookId(int index) {
++        return 4577 + clazz * 2 + index - 19;
++    }
++
++    public synchronized void confirmSkillUpgrade(boolean accepted) throws IOException {
++        int index = pendingSkillUpgrade;
++        pendingSkillUpgrade = -1;
++        if (!accepted || !canUpgradeSkill(index)) return;
++        int book = skillBookId(index);
++        for (int slot = 0; slot < item.bag3.length; slot++) {
++            if (item.bag3[slot] != null && item.bag3[slot].id == book) {
++                item.remove(3, slot, 1);
++                int rank = ++skillUpgrade[index - 19];
++                item.char_inventory(3);
++                Service.send_notice_box(conn, skills[index].name + " nâng lên cấp " + rank
++                        + ". Sát thương kỹ năng +" + template.Skill.upgradePower(rank) + "%.");
++                return;
++            }
++        }
++        Service.send_notice_box(conn, "Chưa có sách kỹ năng phù hợp.");
++    }
+     public long[] time_delay_skill;
+     public Body body;
+     public byte maxbag;
+@@ -347,6 +393,9 @@
+                 skill_point[i] = Byte.parseByte(jsar.get(i).toString());
+                 time_delay_skill[i] = 0;
+             }
++            for (int i = 0; i < skillUpgrade.length && i + 21 < jsar.size(); i++) {
++                skillUpgrade[i] = (byte) Math.max(0, Math.min(10, Integer.parseInt(jsar.get(i + 21).toString())));
++            }
+             jsar.clear();
+             // load item
+             body = new Body(this);
+@@ -914,10 +963,7 @@
+             }
+             a += ",`friend` = '" + jsar.toJSONString() + "'";
+             jsar.clear();
+-            for (int i = 0; i < 21; i++) {
+-                jsar.add(skill_point[i]);
+-            }
+-            a += ",`skill` = '" + jsar.toJSONString() + "'";
++            a += ",`skill` = '" + savedSkillPoints().toJSONString() + "'";
+             jsar.clear();
+             //
+             for (Item47 it : item.bag47) {
+@@ -1790,7 +1836,7 @@
+         MapService.update_in4_2_other_inside(this.map, this);
+     }
+ 
+-    public void plus_point(Message m) throws IOException {
++    public synchronized void plus_point(Message m) throws IOException {
+         byte type = m.reader().readByte();
+         byte index = m.reader().readByte();
+         short value = 1;
+@@ -1798,95 +1844,39 @@
+             value = m.reader().readShort();
+         } catch (IOException e) {
+         }
+-        if (isdie || value < 0) {
++        if (isdie || value <= 0) {
+             return;
+         }
++        if (type == 2) {
++            pendingSkillUpgrade = -1;
++            if (!canUpgradeSkill(index)) {
++                Service.send_notice_box(conn, "Chỉ nâng cấp kỹ năng cấp 110 đã cộng đủ điểm và chưa đạt cấp 10.");
++            } else if (item.total_item_by_id(3, skillBookId(index)) < 1) {
++                Service.send_notice_box(conn, "Cần 1 quyển sách học đúng kỹ năng.");
++            } else {
++                pendingSkillUpgrade = index;
++                Service.send_box_input_yesno(conn, 199, "Dùng 1 sách để nâng cấp " + skills[index].name
++                        + " lên cấp " + (getSkillUpgrade(index) + 1) + "?");
++            }
++            return;
++        }
+         if (type == 1) {
++            if (index < 0 || index >= skill_point.length || skill_point[index] >= skills[index].mLvSkill.length - 5) return;
+             if (kynang >= value) {
+                 if (skill_point[index] == 0 && skills[index].mLvSkill[0].LvRe > this.level) {
+                     Service.send_notice_box(conn, "Level quá thấp!");
+                     return;
+                 }
+                 if (skill_point[index] == 0 && (index == 19 || index == 20)) {
+-                    boolean dont_have_book_skill_110 = true;
+-                    switch (clazz) {
+-                        case 0: {
+-                            if (item.total_item_by_id(3, 4577) > 0 && index == 19) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4577) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            } else if (item.total_item_by_id(3, 4578) > 0 && index == 20) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4578) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            }
+-                            break;
+-                        }
+-                        case 1: {
+-                            if (item.total_item_by_id(3, 4579) > 0 && index == 19) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4579) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            } else if (item.total_item_by_id(3, 4580) > 0 && index == 20) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4580) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            }
+-                            break;
+-                        }
+-                        case 2: {
+-                            if (item.total_item_by_id(3, 4581) > 0 && index == 19) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4581) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            } else if (item.total_item_by_id(3, 4582) > 0 && index == 20) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4582) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            }
+-                            break;
+-                        }
+-                        case 3: {
+-                            if (item.total_item_by_id(3, 4583) > 0 && index == 19) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4583) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            } else if (item.total_item_by_id(3, 4584) > 0 && index == 20) {
+-                                dont_have_book_skill_110 = false;
+-                                for (int i = 0; i < item.bag3.length; i++) {
+-                                    if (item.bag3[i] != null && item.bag3[i].id == 4584) {
+-                                        item.bag3[i] = null;
+-                                    }
+-                                }
+-                            }
+-                            break;
+-                        }
+-                    }
+-                    if (dont_have_book_skill_110) {
++                    int bookId = skillBookId(index);
++                    int slot = 0;
++                    while (slot < item.bag3.length
++                            && (item.bag3[slot] == null || item.bag3[slot].id != bookId)) slot++;
++                    if (slot == item.bag3.length) {
+                         Service.send_notice_box(conn, "Chưa có sách kỹ năng để học!");
+                         return;
+                     }
++                    item.remove(3, slot, 1);
+                     item.char_inventory(3);
+                 }
+                 if (skill_point[index] + value > skills[index].mLvSkill.length - 5) {
+@@ -2299,11 +2289,7 @@
+                         }
+                         ps.setNString(6, jsar.toJSONString());
+                         jsar.clear();
+-                        byte[] sp_save = p0.is_detu_training ? p0.main_skill_point : p0.skill_point;
+-                        for (int i = 0; i < 21; i++) {
+-                            jsar.add(sp_save[i]);
+-                        }
+-                        ps.setNString(7, jsar.toJSONString());
++                        ps.setNString(7, p0.savedSkillPoints().toJSONString());
+                         jsar.clear();
+                         //
+                         for (Item47 it : p0.item.bag47) {
+--- a/src/main/java/client/Process_Yes_no_box.java
++++ b/src/main/java/client/Process_Yes_no_box.java
+@@ -39,6 +39,10 @@
+             type += 256;
+         }
+         byte value = m.reader().readByte(); // value
++        if (type == 199) {
++            conn.p.confirmSkillUpgrade(value == 1);
++            return;
++        }
+         if (value != 1) {
+             switch (type) {
+                 case 110: {
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -18,6 +18,7 @@
+ import template.Option;
+ import template.OptionItem;
+ import template.Player_store;
++import template.TinhTu;
+ 
+ public class GameSrc {
+ 
+@@ -845,8 +846,7 @@
+ 						}
+ 						conn.addmsg(m_send);
+ 						m_send.cleanup();
+-					} else if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id)
+-					      && Item.get_level_tinh_tu(it_temp.level) < 10) {
++					} else if (TinhTu.canUpgrade(it_temp)) {
+ 						Message m_send = new Message(-105);
+ 						m_send.writer().writeByte(4);
+ 						m_send.writer().writeByte(5);
+@@ -1079,11 +1079,51 @@
+ 								break;
+ 							}
+ 						}
++						ItemTemplate3 temp = ItemTemplate3.item.get(id_item_add);
++						byte color_ = (byte) (Util.random(100) == 0 ? 5 : Util.random(5));
++						Item3 itbag = new Item3();
++						itbag.id = temp.getId();
++						itbag.clazz = temp.getClazz();
++						itbag.type = temp.getType();
++						itbag.level = 45; // level required
++						itbag.icon = temp.getIcon();
++						itbag.color = color_;
++						itbag.part = temp.getPart();
++						itbag.islock = false;
++						itbag.name = temp.getName();
++						itbag.tier = 0;
++						//
++                        itbag.op = new ArrayList<>();
++                        int[] hiddenIds = switch (index_create) {
++                            case 1 -> new int[]{154, 143, 151};
++                            case 2, 3 -> new int[]{147, 148, 149, 146, 145};
++                            case 7 -> new int[]{155, 143, 170, 172, 174, 176};
++                            case 6 -> new int[]{167, 169, 152, 170, 172, 174, 176};
++                            case 0 -> new int[]{169, 151, 153, 165};
++                            case 5 -> new int[]{167, 153, 165};
++                            case 4 -> new int[]{152, 153, 165};
++                            default -> throw new IllegalArgumentException("Invalid Tinh Tu slot");
++                        };
++                        int hiddenCount = color_ == 4 ? Util.random(1, 3) : color_ == 5 ? Util.random(2, 4) : 0;
++                        for (int i = 0; i < hiddenCount; i++) {
++                            int pick = Util.random(i, hiddenIds.length);
++                            int optionId = hiddenIds[pick];
++                            hiddenIds[pick] = hiddenIds[i];
++                            hiddenIds[i] = optionId;
++                            int value = OptionItem.entrys.get(optionId).getIspercent() == 2
++                                    ? 60_000 : Util.random(10, 300);
++                            itbag.op.add(new Option(optionId, value));
++                        }
++                        for (Option option : temp.getOp()) {
++                            itbag.op.add(new Option(option.id, TinhTu.rollStat(option.getParam(0))));
++                        }
++                        itbag.op.add(new Option(129, 10_000));
++                        if (color_ >= 3) itbag.op.add(new Option(130, Util.random(9) * 100 + 100));
++						itbag.time_use = 0;
++						conn.p.item.add_item_bag3(itbag);
+ 						Message m = new Message(-105);
+ 						m.writer().writeByte(3);
+ 						m.writer().writeByte(3);
+-						ItemTemplate3 temp = ItemTemplate3.item.get(id_item_add);
+-						byte color_ = (byte) Util.random(0, 5);
+ 						m.writer().writeUTF("Chúc mừng bạn nhận được " + temp.getName());
+ 						m.writer().writeByte(3);
+ 						m.writer().writeUTF(temp.getName());
+@@ -1096,11 +1136,7 @@
+ 						m.writer().writeByte(color_); // color
+ 						m.writer().writeByte(0); // can sell
+ 						m.writer().writeByte(0); // can trade
+-						m.writer().writeByte(temp.getOp().size());
+-						for (int i = 0; i < temp.getOp().size(); i++) {
+-							m.writer().writeByte(temp.getOp().get(i).id);
+-							m.writer().writeInt(temp.getOp().get(i).getParam(0));
+-						}
++						itbag.writeItemOptions(m, conn.p.clazz);
+ 						m.writer().writeInt(0); // time use
+ 						m.writer().writeByte(0);
+ 						m.writer().writeByte(0);
+@@ -1108,60 +1144,6 @@
+ 						conn.addmsg(m);
+ 						m.cleanup();
+ 						//
+-						Item3 itbag = new Item3();
+-						itbag.id = temp.getId();
+-						itbag.clazz = temp.getClazz();
+-						itbag.type = temp.getType();
+-						itbag.level = 45; // level required
+-						itbag.icon = temp.getIcon();
+-						itbag.color = color_;
+-						itbag.part = temp.getPart();
+-						itbag.islock = false;
+-						itbag.name = temp.getName();
+-						itbag.tier = 0;
+-						//
+-						List<Option> opnew = new ArrayList<>();
+-						if (color_ >= 2) {
+-							int size = color_ == 3 ? 1 : (color_ == 4 ? Util.random(1, 3) : Util.random(2, 4));
+-							for (int i = 0; i < size; i++) {
+-								if (index_create == 1) {
+-									short[] RD = new short[] {154, 143, 151};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 2 || index_create == 3) {
+-									short[] RD = new short[] {147, 148, 149, 146, 145};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 7) {
+-									short[] RD = new short[] {155, 143, 170, 172, 174, 176};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 6) {
+-									short[] RD = new short[] {167, 169, 152, 170, 172, 174, 176};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 0) {
+-									short[] RD = new short[] {169, 151, 153, 165};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 5) {
+-									short[] RD = new short[] {167, 153, 165};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								} else if (index_create == 4) {
+-									short[] RD = new short[] {152, 153, 165};
+-									opnew.add(new Option(RD[Util.random(RD.length)], Util.random(10, 300)));
+-								}
+-								if (OptionItem.entrys.get(Byte.toUnsignedInt(opnew.get(opnew.size() - 1).id))
+-								      .getIspercent() == 2) {
+-									opnew.get(opnew.size() - 1).setParam(60_000);
+-								}
+-							}
+-						}
+-						//
+-						itbag.op = new ArrayList<>();
+-						itbag.op.addAll(opnew);
+-						for (int i = 0; i < temp.getOp().size(); i++) {
+-							int value_old = temp.getOp().get(i).getParam(0);
+-							itbag.op.add(new Option(temp.getOp().get(i).id, Util.random((value_old * 9) / 10, value_old)));
+-						}
+-						itbag.op.add(new Option(129, 10000));
+-						itbag.time_use = 0;
+-						conn.p.item.add_item_bag3(itbag);
+ 						//
+ 						conn.p.tinhtu_material[0] =
+ 						      50 > Util.random(120) ? TinhTu_Material.NHOM_1[Util.random(TinhTu_Material.NHOM_1.length)]
+@@ -1312,13 +1294,7 @@
+ 						m.cleanup();
+ 					}
+ 					//
+-				} else if (it_temp != null && template.ItemSellCoin.isTinhTu(it_temp.id)
+-				      && Item.get_level_tinh_tu(it_temp.level) < 10) {
+-					for (int i = 0; i < it_temp.op.size(); i++) {
+-						if (Byte.toUnsignedInt(it_temp.op.get(i).id) == 129) {
+-							int old_value = it_temp.op.get(i).getParam(0);
+-						}
+-					}
++				} else if (TinhTu.canUpgrade(it_temp)) {
+ 					for (int i = 0; i < conn.p.tinhtu_material.length; i++) {
+ 						short id_item_upgr = conn.p.tinhtu_material[i];
+ 						int quant_item_upgr = get_quant_material_medal_upgrade((byte) Item.get_level_tinh_tu(it_temp.level));
+@@ -1338,14 +1314,17 @@
+ 						int quant_item_upgr = get_quant_material_medal_upgrade((byte) Item.get_level_tinh_tu(it_temp.level));
+ 						conn.p.item.remove(7, id_item_upgr, quant_item_upgr);
+ 					}
+-					boolean suc = (50 > Util.random(100 + it_temp.level));
+-					if (suc) {
++					int luck = TinhTu.luck(it_temp);
++                    int baseChance = 500_000 / (100 + it_temp.level);
++                    boolean suc = TinhTu.rolls(baseChance + luck);
++                    if (suc) {
+ 						it_temp.level += 10;
+ 						for (int i = 0; i < it_temp.op.size(); i++) {
+ 							Option op_temp = it_temp.op.get(i);
+ 							// Socket values are gem template IDs (or -1 for an empty socket), not stats.
+ 							int optionId = Byte.toUnsignedInt(op_temp.id);
+-							if ((optionId < 58 || optionId > 60) && op_temp.getParam(0) < 10_000) {
++							if ((optionId < 58 || optionId > 60) && optionId != 129 && optionId != 130
++                                    && !TinhTu.isHidden(optionId) && op_temp.getParam(0) < 10_000) {
+ 								int old_value = op_temp.getParam(0);
+ 								op_temp.setParam(old_value + Util.random(10));
+ 							}
+@@ -1362,19 +1341,11 @@
+ 							conn.p.tinhtu_material[3] = Medal_Material.m_violet[Util.random(Medal_Material.m_violet.length)];
+ 							conn.p.tinhtu_material[4] = TinhTu_Material.NHOM_4[Util.random(TinhTu_Material.NHOM_4.length)];
+ 						}
+-					} else {
+-						for (int i = 0; i < it_temp.op.size(); i++) {
+-							if (Byte.toUnsignedInt(it_temp.op.get(i).id) == 129) {
+-								int old_value = it_temp.op.get(i).getParam(0);
+-								old_value -= 100;
+-								if (old_value < 0) {
+-									old_value = 0;
+-								}
+-								it_temp.op.get(i).setParam(old_value);
+-								break;
+-							}
+-						}
+-					}
++                    } else if (!TinhTu.rolls(luck)) {
++                        Option durability = TinhTu.option(it_temp, 129);
++                        if (durability == null) it_temp.op.add(new Option(129, 9_900));
++                        else durability.setParam(Math.max(0, durability.getParam(0) - 100));
++                    }
+ 					//
+ 					Message m = new Message(-105);
+ 					m.writer().writeByte(3);
+--- a/src/main/java/core/Manager.java
++++ b/src/main/java/core/Manager.java
+@@ -184,6 +184,7 @@
+                 }
+                 buffer.add(new Option(Byte.parseByte(jsar2.get(0).toString()), Integer.parseInt(jsar2.get(1).toString())));
+             }
++            template.WeaponStats.applyMaximum(temp, buffer);
+             temp.setOp(buffer);
+             // set type leave
+             if (temp.getType() < 12 && temp.getType() != 7) {
+--- a/src/main/java/core/SaveData.java
++++ b/src/main/java/core/SaveData.java
+@@ -216,11 +216,7 @@
+                         }
+                         ps.setNString(6, jsar.toJSONString());
+                         jsar.clear();
+-                        byte[] sp_save = p0.is_detu_training ? p0.main_skill_point : p0.skill_point;
+-                        for (int i = 0; i < 21; i++) {
+-                            jsar.add(sp_save[i]);
+-                        }
+-                        ps.setNString(7, jsar.toJSONString());
++                        ps.setNString(7, p0.savedSkillPoints().toJSONString());
+                         jsar.clear();
+                         //
+                         for (Item47 it : p0.item.bag47) {
+--- a/src/main/java/map/LeaveItemMap.java
++++ b/src/main/java/map/LeaveItemMap.java
+@@ -201,20 +201,11 @@
+ 			map.item_map[index_item_map].category = 3;
+ 			map.item_map[index_item_map].idmaster = (short) p_master.id;
+ 			List<Option> opnew = new ArrayList<Option>();
+-			for (Option op_old : ItemTemplate3.item.get(index_real).getOp()) {
+-				Option temp = new Option(1, 1);
+-				temp.id = op_old.id;
+-				if (temp.id != 37 && temp.id != 38) {
+-					if (op_old.getParam(0) < 10) {
+-						temp.setParam(Util.random(0, 10));
+-					} else {
+-						temp.setParam(Util.random((9 * op_old.getParam(0)) / 10, op_old.getParam(0)));
+-					}
+-				} else {
+-					temp.setParam(1);
+-				}
+-				opnew.add(temp);
+-			}
++            for (Option option : ItemTemplate3.item.get(index_real).getOp()) {
++                int value = option.id == 37 || option.id == 38 ? 1
++                        : template.TinhTu.rollStat(option.getParam(0));
++                opnew.add(new Option(option.id, value));
++            }
+ 			map.item_map[index_item_map].op = new ArrayList<>();
+ 			map.item_map[index_item_map].op.addAll(opnew);
+ 			map.item_map[index_item_map].time_exist = System.currentTimeMillis() + 60_000L;
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -30,6 +30,7 @@
+ import template.Pet_di_buon;
+ import template.Pet_di_buon_manager;
+ import template.SpecialDamage;
++import template.TinhTu;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.SQLException;
+@@ -570,20 +571,11 @@
+                     }
+                 }
+             }
+-            // === IMMUNITY EFFECTS (mob -> player) ===
+-            // mien st: bo qua st mob khi bi danh
+-            if (dmob > 0 && p_target.hp > 0) {
+-            int[][] immunityCheck = {
+-                {-220, -123}, {-221, -122}, {-222, -121}, {-223, -120}, {-224, -119}
+-            };
+-                for (int[] ic : immunityCheck) {
+-                    int param = get_combat_effect_param(p_target, ic[0], ic[1]);
+-                    if (param > 0 && param > Util.random(100)) {
+-                        dmob = 0;
+-                        p_target.show_eff_p(15, 1000);
+-                        break;
+-                    }
+-                }
++            if (p_target.get_eff(-234) != null) dmob = 0;
++            if (dmob > 0 && p_target.hp > 0
++                    && TinhTu.rolls(get_combat_effect_param(p_target, -222, 135))) {
++                dmob = 0;
++                p_target.show_eff_p(15, 1000);
+             }
+             // giap bao ho: giam st mob
+             if (dmob > 0 && p_target.hp > 0) {
+@@ -607,11 +599,12 @@
+             // thieu chay: aoe 5000/3s khi hp <= 30%
+             if (dmob > 0 && p_target.hp > 0) {
+                 long max_hp_target = p_target.body.get_max_hp();
+-                if (max_hp_target > 0 && p_target.hp <= max_hp_target * 30 / 100) {
++                int tcParam = p_target.body.get_equipment_effect(141);
++                if (tcParam > 0 && max_hp_target > 0 && p_target.hp <= max_hp_target * 30 / 100) {
+                     EffTemplate efTC = p_target.get_eff(-235);
+                     if (efTC == null && System.currentTimeMillis() > p_target.time_thieu_chay_cd) {
+                         p_target.add_eff(-235, 5000, 20000);
+-                        p_target.time_thieu_chay_cd = System.currentTimeMillis() + 30000L;
++                        p_target.time_thieu_chay_cd = System.currentTimeMillis() + Math.max(1000, tcParam);
+                     }
+                 }
+             }
+@@ -1701,7 +1694,8 @@
+         }
+         synchronized (map) {
+             byte index_skill = m.reader().readByte();
+-            int n = m.reader().readByte();
++            int n = m.reader().readUnsignedByte();
++            if (index_skill < 0 || index_skill >= conn.p.skills.length || n > m.reader().available() / 2) return;
+             int sk_point = conn.p.body.get_skill_point(index_skill);
+             if (sk_point < 1) {
+                 return;
+@@ -1735,7 +1729,7 @@
+                     return;
+                 }
+                 // lu loan: khong tan cong duoc
+-                if (conn.p.get_eff(-205) != null) {
++                if (conn.p.get_eff(-205) != null || conn.p.get_eff(-233) != null) {
+                     return;
+                 }
+                 EffTemplate ef;
+@@ -1946,16 +1940,20 @@
+                     }
+                 }
+ 
+-                if (dame > 2_000_000_000) {
+-                    dame = 2_000_000_000;
+-                }
++                int upgrade = conn.p.getSkillUpgrade(index_skill);
++                dame = Math.min(2_000_000_000L, dame + dame * template.Skill.upgradePower(upgrade) / 100);
++                boolean upgradeProc = upgrade > 0 && Util.random(100) < 5;
++                java.util.Set<Integer> upgradedTargets = upgradeProc ? new java.util.HashSet<>() : null;
+                 if (type_atk == 0) {
+                     for (int i = 0; i < n; ++i) {
+                         int n2 = Short.toUnsignedInt(m.reader().readShort());
++                        if (upgradedTargets != null && !upgradedTargets.add(n2)) continue;
++                        long targetDamage = upgradeProc ? Math.min(2_000_000_000L,
++                                dame + template.Skill.upgradeSecondary(upgrade, upgradedTargets.size() - 1, dame)) : dame;
+                         if (map.d != null) {
+                             Mob_Dungeon target = map.d.get_mob(n2);
+                             if (target != null) {
+-                                map.d.fire_mob(map, target, conn.p, index_skill, (int) dame);
++                                map.d.fire_mob(map, target, conn.p, index_skill, (int) targetDamage);
+                             }
+                         } else if (map.zone_id == map.maxzone) {
+                             Pet_di_buon pet_di_buon = Pet_di_buon_manager.check(n2);
+@@ -2011,7 +2009,7 @@
+                                     conn.p.detu.target_mob = mob_target;
+                                     conn.p.detu.updateAI(map);
+                                 }
+-                                MapService.fire_mob(map, mob_target, conn.p, index_skill, dame);
++                                MapService.fire_mob(map, mob_target, conn.p, index_skill, targetDamage);
+                             } else if (Map.is_map_chiem_mo(conn.p.map, true) && conn.p.myclan != null) {
+                                 Mob_MoTaiNguyen temp_mob = conn.p.myclan.get_mo_tai_nguyen(n2);
+                                 if (temp_mob == null) {
+@@ -2162,13 +2160,16 @@
+                     }
+                     for (int i = 0; i < n; ++i) {
+                         int n2 = Short.toUnsignedInt(m.reader().readShort());
++                        if (upgradedTargets != null && !upgradedTargets.add(n2)) continue;
++                        long targetDamage = upgradeProc ? Math.min(2_000_000_000L,
++                                dame + template.Skill.upgradeSecondary(upgrade, upgradedTargets.size() - 1, dame)) : dame;
+ 
+                         if (n2 == Short.toUnsignedInt((short) -1)) {
+-                            MapService.fire_player(map, Manager.gI().bossTG.p, conn.p, index_skill, dame, type);
++                            MapService.fire_player(map, Manager.gI().bossTG.p, conn.p, index_skill, targetDamage, type);
+                         } else {
+                             Player p_target = MapService.get_player_by_id(map, n2);
+                             if (p_target != null) {
+-                                MapService.fire_player(map, p_target, conn.p, index_skill, dame, type);
++                                MapService.fire_player(map, p_target, conn.p, index_skill, targetDamage, type);
+                             } else if (Map.is_map_chiem_mo(conn.p.map, true) && conn.p.myclan != null) {
+                                 Mob_MoTaiNguyen temp_mob = conn.p.myclan.get_mo_tai_nguyen(n2);
+                                 if (temp_mob == null) {
+@@ -2320,11 +2321,7 @@
+         }
+         // === STAT REDUCTION EFFECTS ===
+         // giap ve binh: giam xuyen giap cua nguoi danh di 90%
+-        int gvbParam = get_combat_effect_param(p, -231, -81);
+-        if (gvbParam > 0) {
+-            p.add_eff(-231, 90, 3000);
+-            p.show_eff_p(26, 1000);
+-        }
++        boolean guardArmor = TinhTu.rolls(p0.body.get_equipment_effect(175)) || p.get_eff(-231) != null;
+         EffTemplate ef = null;
+         int cr = p.body.get_crit();
+         ef = p.get_eff(33);
+@@ -2332,8 +2329,7 @@
+             cr += ef.param;
+         }
+         // giap bach kim: giam chi mang cua ke danh di 90%
+-        int gbkAtkParam = get_combat_effect_param(p0, -229, -85);
+-        if (gbkAtkParam > 0) {
++        if (TinhTu.rolls(p0.body.get_equipment_effect(171)) || p.get_eff(-229) != null) {
+             cr = cr * 10 / 100;
+         }
+         boolean crit = cr > Util.random(0, 15000);
+@@ -2344,8 +2340,7 @@
+             rc_dame += ef.param;
+         }
+         // giap thien su: giam phan dame cua ke danh di 90%
+-        int gtsAtkParam = get_combat_effect_param(p0, -230, -83);
+-        if (gtsAtkParam > 0) {
++        if (TinhTu.rolls(p.body.get_equipment_effect(173)) || p0.get_eff(-230) != null) {
+             rc_dame = rc_dame * 10 / 100;
+         }
+         boolean react_dame = rc_dame > Util.random(0, 15000);
+@@ -2359,8 +2354,7 @@
+                 pier += ef.param;
+             }
+             // giap ve binh: giam xuyen giap cua ke danh di 90%
+-            int gvbAtkParam = get_combat_effect_param(p, -231, -81);
+-            if (gvbAtkParam > 0) {
++            if (guardArmor) {
+                 pier = pier * 10 / 100;
+             }
+             if (pier > Util.random(0, 15000)) {
+@@ -2394,17 +2388,10 @@
+             miss += ef.param;
+         }
+         // chinh xac: giam ne tranh cua ke thu di 90%
+-        int cxAtkParam = get_combat_effect_param(p, -228, -86);
+-        if (cxAtkParam > 0) {
++        if (TinhTu.rolls(p.body.get_equipment_effect(170)) || p0.get_eff(-228) != null) {
+             miss = miss * 10 / 100;
+         }
+-        // mu mat: lam skill hu, giam ne tranh = 100%
+-        int mmDefParam = get_combat_effect_param(p0, -233, -116);
+-        if (mmDefParam > 0) {
+-            miss = 100;
+-        }
+-
+-        if (miss > Util.random(0, 2_000_000)) {
++        if (p.get_eff(-233) != null || miss > Util.random(0, 2_000_000)) {
+             dame = 0;
+             pierce = false;
+             react_dame = false;
+@@ -2462,20 +2449,17 @@
+         // === NEW COMBAT EFFECTS (DEFENDER) ===
+         // mien st: bo qua st theo ty le khi bi danh
+         if (dame > 0 && p0.hp > 0) {
+-            int[][] immunityCheck = {
+-                {-220, -123}, // lua → 133
+-                {-221, -122}, // doc → 134
+-                {-222, -121}, // vl → 135
+-                {-223, -120}, // bang → 136
+-                {-224, -119}  // dien → 137
++            int element = type_atk == 1 ? Item3.getClassDamageOptionId(p.clazz) : 0;
++            int option = switch (element) {
++                case 1 -> 136;
++                case 2 -> 133;
++                case 3 -> 137;
++                case 4 -> 134;
++                default -> 135;
+             };
+-            for (int[] ic : immunityCheck) {
+-                int param = get_combat_effect_param(p0, ic[0], ic[1]);
+-                if (param > 0 && (param >= 100 || param > Util.random(10000))) {
+-                    dame = 0;
+-                    p0.show_eff_p(15, 1000);
+-                    break;
+-                }
++            if (TinhTu.rolls(get_combat_effect_param(p0, -220 - (option - 133), option))) {
++                dame = 0;
++                p0.show_eff_p(15, 1000);
+             }
+         }
+         // giap bao ho: giam st nguoi danh (100%->75%->50%) trong 10s
+@@ -2483,11 +2467,12 @@
+             int gbhParam = get_combat_effect_param(p0, -225, -114);
+             if (gbhParam > 0) {
+                 long now = System.currentTimeMillis();
+-                if (p0.giap_bao_ho_time < now) {
++                if (p0.giap_bao_ho_time < now && TinhTu.rolls(gbhParam)) {
+                     p0.giap_bao_ho_hit_count = 0;
+                     p0.giap_bao_ho_time = now + 10000L;
+                 }
+-                p0.giap_bao_ho_hit_count++;
++                if (p0.giap_bao_ho_time >= now) p0.giap_bao_ho_hit_count++;
++                else p0.giap_bao_ho_hit_count = 0;
+                 if (p0.giap_bao_ho_hit_count == 2) {
+                     dame = dame * 75 / 100;
+                     p0.show_eff_p(14, 1000);
+@@ -2501,7 +2486,7 @@
+         if (dame > 0 && p0.hp > 0) {
+             int bpParam = get_combat_effect_param(p0, -226, -125);
+             if (bpParam > 0 && System.currentTimeMillis() > p0.time_boc_pha_cd) {
+-                if (bpParam >= 100 || bpParam > Util.random(10000)) {
++                if (TinhTu.rolls(bpParam)) {
+                     long max_hp = p0.body.get_max_hp();
+                     long explosion_dame = max_hp * (10 + Util.random(31)) / 100;
+                     p0.time_boc_pha_cd = System.currentTimeMillis() + 5000L;
+@@ -2512,7 +2497,6 @@
+                                 int dx = Math.abs(p2.x - p0.x);
+                                 int dy = Math.abs(p2.y - p0.y);
+                                 if (dx <= 6 * 24 && dy <= 6 * 24) {
+-                                    p2.hp -= explosion_dame;
+                                     Service.usepotion(p2, 0, -(int) explosion_dame);
+                                     if (p2.hp <= 0) {
+                                         p2.hp = 0;
+@@ -2528,7 +2512,7 @@
+         // mu mat: lam doi thu bi mu, skill hu
+         if (dame > 0 && p0.hp > 0) {
+             int mmParam = get_combat_effect_param(p, -233, -116);
+-            if (mmParam > 0 && (mmParam >= 100 || mmParam > Util.random(10000))) {
++            if (mmParam > 0 && TinhTu.rolls(mmParam)) {
+                 int dur = p.body.get_effect_duration(140, 5000);
+                 p0.add_eff(-233, 1, dur);
+                 p0.show_eff_p(18, 1000);
+@@ -2605,7 +2589,7 @@
+         // ngu dan: tat pet doi thu 30s
+         if (dame > 0 && p0.hp > 0) {
+             int ndParam = get_combat_effect_param(p, -232, -90);
+-            if (ndParam > 0 && (ndParam >= 100 || ndParam > Util.random(10000))) {
++            if (ndParam > 0 && TinhTu.rolls(ndParam)) {
+                 p0.time_ngu_dan_target = System.currentTimeMillis() + 30000L;
+                 p0.show_eff_p(19, 1000);
+             }
+@@ -2613,8 +2597,9 @@
+         // tan phere: giam mp doi thu con 1%, cam hoi mp 5s
+         if (dame > 0 && p0.hp > 0) {
+             int tpParam = get_combat_effect_param(p, -236, -92);
+-            if (tpParam > 0 && (tpParam >= 100 || tpParam > Util.random(10000))) {
+-                p0.mp = 1;
++            if (tpParam > 0 && TinhTu.rolls(tpParam)) {
++                p0.mp = Math.min(p0.mp, Math.max(1, p0.body.get_max_mp() / 100));
++                Service.usepotion(p0, 1, 0);
+                 p0.add_eff(-236, 1, 5000);
+                 p0.show_eff_p(21, 1000);
+             }
+@@ -2623,12 +2608,12 @@
+         if (dame > 0 && p0.hp > 0) {
+             long max_hp = p0.body.get_max_hp();
+             if (max_hp > 0 && p0.hp <= max_hp * 30 / 100) {
+-                int tcParam = get_combat_effect_param(p0, -235, -115);
++                int tcParam = p0.body.get_equipment_effect(141);
+                 if (tcParam > 0) {
+                     EffTemplate efTC = p0.get_eff(-235);
+                     if (efTC == null && System.currentTimeMillis() > p0.time_thieu_chay_cd) {
+                         p0.add_eff(-235, 5000, 20000);
+-                        p0.time_thieu_chay_cd = System.currentTimeMillis() + 30000L;
++                        p0.time_thieu_chay_cd = System.currentTimeMillis() + Math.max(1000, tcParam);
+                         p0.show_eff_p(20, 1000);
+                     }
+                 }
+@@ -2638,45 +2623,23 @@
+         if (dame > 0 && p0.hp > 0) {
+             long max_hp = p0.body.get_max_hp();
+             if (max_hp > 0 && p0.hp - dame <= max_hp * 5 / 100 && p0.hp - dame > 0) {
+-                int btParam = get_combat_effect_param(p0, -234, -88);
++                int btParam = p0.body.get_equipment_effect(168);
+                 if (btParam > 0) {
+                     EffTemplate efBT = p0.get_eff(-234);
+                     if (efBT == null && System.currentTimeMillis() > p0.time_bat_tu_cd) {
+                         p0.add_eff(-234, 1, 5000);
+                         dame = 0;
+-                        p0.time_bat_tu_cd = System.currentTimeMillis() + 30000L;
++                        p0.time_bat_tu_cd = System.currentTimeMillis() + Math.max(1000, btParam);
+                         p0.show_eff_p(22, 1000);
+                     }
+                 }
+             }
+         }
+-        // chinh xac: giam ne tranh 90% cua ke thu
+-        if (dame > 0 && p0.hp > 0) {
+-            int cxParam = get_combat_effect_param(p, -228, -86);
+-            if (cxParam > 0) {
+-                p0.add_eff(-228, 90, 3000);
+-                p0.show_eff_p(23, 1000);
+-            }
+-        }
+-        // giap bach kim: giam chi mang 90% cua ke thu
+-        if (dame > 0 && p0.hp > 0) {
+-            int gbkParam = get_combat_effect_param(p, -229, -85);
+-            if (gbkParam > 0) {
+-                p0.add_eff(-229, 90, 3000);
+-                p0.show_eff_p(24, 1000);
+-            }
+-        }
+-        // giap thien su: giam phan dame 90% cua ke thu
+-        if (dame > 0 && p0.hp > 0) {
+-            int gtsParam = get_combat_effect_param(p, -230, -83);
+-            if (gtsParam > 0) {
+-                p0.add_eff(-230, 90, 3000);
+-                p0.show_eff_p(25, 1000);
+-            }
+-        }
+ 
+         //
+-        boolean affect_special_skill = 5 > Util.random(0, 100);
++        boolean invulnerable = p0.get_eff(-234) != null;
++        if (invulnerable) dame = 0;
++        boolean affect_special_skill = !invulnerable && 5 > Util.random(0, 100);
+         if (affect_special_skill && p.clazz == 2 && type_atk == 1) {
+             p0.hp_restore = ((int) Math.min(p0.hp, Integer.MAX_VALUE) * 2) / 10;
+             p0.hp -= p0.hp_restore;
+@@ -2684,7 +2647,7 @@
+         //
+ 
+         // Special damage (Light / Dark) calculation
+-        SpecialDamage spDame = SpecialDamage.calculate(p);
++        SpecialDamage spDame = invulnerable ? new SpecialDamage() : SpecialDamage.calculate(p);
+ 
+         if (Manager.gI().bossTG.p.equals(p0)) {
+             Manager.gI().bossTG.update_dame(p.name, dame + (spDame.damage > 0 ? spDame.damage : 0));
+@@ -2714,11 +2677,7 @@
+                     p.hung_tan_hit_count = 0;
+                     long max_hp = p.body.get_max_hp();
+                     long heal = max_hp * (3 + Util.random(3)) / 100; // 3-5% max hp
+-                    p.hp += heal;
+-                    if (p.hp > max_hp) {
+-                        p.hp = max_hp;
+-                    }
+-                    Service.usepotion(p, 0, (int) heal);
++                    Service.usepotion(p, 0, heal);
+                     p.show_eff_p(27, 1000);
+                     p.hung_tan_required_hits = 5 + Util.random(6);
+                 }
+@@ -3069,7 +3028,7 @@
+         if (dame > 0 && mob.hp > 0 && !mob.isdie) {
+             // mu mat: 140 / -116
+             int mmParam = get_combat_effect_param(p, -233, -116);
+-            if (mmParam > 0 && (mmParam >= 100 || mmParam > Util.random(10000))) {
++            if (mmParam > 0 && TinhTu.rolls(mmParam)) {
+                 // visual effect on attacker/target
+                 p.show_eff_p(18, 1000);
+             }
+@@ -3111,9 +3070,7 @@
+                     p.hung_tan_hit_count = 0;
+                     long max_hp = p.body.get_max_hp();
+                     long heal = max_hp * (3 + Util.random(3)) / 100;
+-                    p.hp += heal;
+-                    if (p.hp > max_hp) p.hp = max_hp;
+-                    Service.usepotion(p, 0, (int) heal);
++                    Service.usepotion(p, 0, heal);
+                     p.show_eff_p(27, 1000);
+                     p.hung_tan_required_hits = 5 + Util.random(6);
+                 }
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -165,7 +165,7 @@
+         item.name = template.getName();
+         item.clazz = template.getClazz();
+         item.type = template.getType();
+-        item.level = (short) (isTinhTu(id) ? 45 : 10);
++        item.level = isTinhTu(id) ? 45 : template.getType() == 53 ? template.getLevel() : 10;
+         item.icon = template.getIcon();
+         item.color = color;
+         item.part = template.getPart();
+@@ -185,6 +185,15 @@
+                 offer.price = template.getType() == 27 ? 200000 : 400000;
+                 offer.op = new ArrayList<>();
+                 offers.put(offer.id, offer);
++            }
++        }
++        for (short bookId = 4577; bookId <= 4584; bookId++) {
++            if (!offers.containsKey(bookId) && bookId < ItemTemplate3.item.size()) {
++                ItemSellCoin book = new ItemSellCoin();
++                book.id = bookId;
++                book.price = 100_000;
++                book.op = new ArrayList<>();
++                offers.put(bookId, book);
+             }
+         }
+         int[][] hidden = {{4664,154,299,143,299},{4656,147,299,145,299},
+--- a/src/main/java/template/Option.java
++++ b/src/main/java/template/Option.java
+@@ -2,7 +2,7 @@
+ 
+ public class Option {
+ 	private static final int[] parafterupdate =
+-	      new int[] {1, 110, 120, 130, 140, 150, 160, 172, 184, 196, 208, 220, 235, 250, 265, 280};
++	      new int[] {100, 110, 120, 130, 140, 150, 160, 172, 184, 196, 208, 220, 235, 250, 265, 280};
+ 	public byte id;
+ 	private int param;
+ 
+@@ -12,10 +12,10 @@
+ 	}
+ 
+ 	public int getParam(int tier) {
+-		if (tier == 0) {
++		if (tier <= 0) {
+ 			return param;
+ 		}
+-		//
++		tier = Math.min(15, tier);
+ 		int parbuffer = this.param;
+ 		if (this.id >= 29 && this.id <= 36 || this.id >= 16 && this.id <= 22 || this.id == 41) {
+ 			parbuffer += 20 * tier;
+@@ -33,9 +33,6 @@
+ 		if ((this.id == 37 || this.id == 38) && tier < 9) {
+ 			return 1;
+ 		}
+-		if (tier > 15) {
+-			tier = 15;
+-		}
+ 		if (this.id == 72 || this.id == 73 || this.id == 74 || this.id == 75) {
+ 			return parbuffer;
+ 		}
+@@ -43,7 +40,7 @@
+ 			if (this.id == 5 || this.id == 6) {
+ 				return parbuffer; // Special Damage is not scaled by equipment tier
+ 			}
+-			parbuffer = (parafterupdate[tier] * this.param) / 100;
++			parbuffer = (int) Math.min(Integer.MAX_VALUE, (long) parafterupdate[tier] * this.param / 100);
+ 			return parbuffer;
+ 		}
+ 		return parbuffer;
+--- a/src/main/java/template/Skill.java
++++ b/src/main/java/template/Skill.java
+@@ -1,6 +1,18 @@
+ package template;
+ 
+ public class Skill {
++    private static final int[] UPGRADE_POWER = {0, 5, 8, 11, 14, 17, 20, 23, 26, 29, 35};
++    private static final int[] UPGRADE_SECONDARY = {0, 10, 13, 16, 19, 21, 24, 27, 30, 33, 36};
++
++    public static int upgradePower(int rank) {
++        return UPGRADE_POWER[rank];
++    }
++
++    public static long upgradeSecondary(int rank, int targetIndex, long damage) {
++        if (targetIndex >= Math.min(5, (rank + 1) / 2)) return 0;
++        return damage * UPGRADE_SECONDARY[rank] / 100;
++    }
++
+ 	public byte id;
+ 	public byte iconid;
+ 	public String name;
+--- /dev/null
++++ b/src/main/java/template/TinhTu.java
+@@ -0,0 +1,65 @@
++package template;
++
++import core.Util;
++
++public final class TinhTu {
++    private static final int[][] SET_SLOTS = {{1, 6, 7}, {0, 3, 9}, {2, 4, 8}};
++
++    private TinhTu() {}
++
++    public static boolean isHidden(int id) {
++        return id == 128 || id >= 131 && id <= 155 || id >= 164 && id <= 176;
++    }
++
++    public static int activeOption(int id) {
++        if (id == 128) return 155;
++        if (id >= 131 && id <= 142) return id + 12;
++        if (id == 164 || id == 166 || id == 168 || id == 171 || id == 173 || id == 175) return id + 1;
++        return id;
++    }
++
++    public static boolean groupIsComplete(Item3[] worn, int slot) {
++        for (int[] group : SET_SLOTS) {
++            for (int member : group) {
++                if (slot != member) continue;
++                for (int required : group) {
++                    Item3 item = worn[required];
++                    if (item == null || !(ItemSellCoin.isTinhTu(item.id)
++                            || ((required == 3 || required == 9) && item.id == 3609)
++                            || (required == 4 && item.id == 2940))) return false;
++                }
++                return true;
++            }
++        }
++        return false;
++    }
++
++    public static boolean canUpgrade(Item3 item) {
++        if (item == null || !ItemSellCoin.isTinhTu(item.id) || item.color < 3
++                || client.Item.get_level_tinh_tu(item.level) >= 10) return false;
++        Option durability = option(item, 129);
++        return durability == null || durability.getParam(0) > 0;
++    }
++
++    public static Option option(Item3 item, int id) {
++        for (Option option : item.op) {
++            if (Byte.toUnsignedInt(option.id) == id) return option;
++        }
++        return null;
++    }
++
++    public static int luck(Item3 item) {
++        Option luck = option(item, 130);
++        return luck == null ? 0 : Math.max(0, Math.min(900, luck.getParam(0)));
++    }
++
++    public static boolean rolls(int chance) {
++        return chance > 0 && (chance >= 10000 || Util.random(10000) < chance);
++    }
++
++    public static int rollStat(int maximum) {
++        if (maximum <= 0 || maximum == Integer.MAX_VALUE) return maximum;
++        int minimum = (int) ((maximum * 9L + 9) / 10);
++        return minimum == maximum ? maximum : Util.random(minimum, maximum + 1);
++    }
++}
+--- /dev/null
++++ b/src/main/java/template/WeaponStats.java
+@@ -0,0 +1,32 @@
++package template;
++
++import java.util.List;
++
++public final class WeaponStats {
++    private static final int[] LOW = {72, 99, 140, 196, 260, 339, 428, 534, 646, 772, 909, 1265, 1473, 1670};
++    private static final int[] HIGH = {76, 104, 149, 202, 270, 349, 439, 546, 659, 786, 926, 1286, 1495, 1688};
++    private static final int[] ASSASSIN_POISON = {72, 99, 140, 196, 260, 339, 428, 534, 646, 772, 909, 1329, 1548, 1750};
++    private static final int[] ASSASSIN_PHYSICAL = {76, 104, 149, 202, 270, 349, 439, 546, 659, 786, 926, 1351, 1570, 1772};
++
++    private WeaponStats() {}
++
++    public static void applyMaximum(ItemTemplate3 item, List<Option> options) {
++        int level = item.getLevel();
++        if (item.getType() < 8 || item.getType() > 11 || item.getColor() != 4
++                || level < 1 || level > 130 || (level != 1 && level % 10 != 0)
++                || ItemSellCoin.isTinhTu(item.getId()) || item.getClazz() < 0 || item.getClazz() > 3) {
++            return;
++        }
++        int grade = level / 10;
++        for (Option option : options) {
++            if (option.id < 0 || option.id > 4) continue;
++            boolean physical = option.id == 0;
++            int[] table = switch (item.getClazz()) {
++                case 0 -> physical ? HIGH : LOW;
++                case 1 -> physical ? ASSASSIN_PHYSICAL : ASSASSIN_POISON;
++                default -> physical ? LOW : HIGH;
++            };
++            option.setParam(table[grade]);
++        }
++    }
++}

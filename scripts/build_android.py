@@ -1,12 +1,13 @@
 """Compile the embedded server and rebuild a privately supplied game APK."""
 import argparse,os,re,shutil,subprocess,zipfile
 from pathlib import Path
-from patch_android_client import patch
+from patch_android_client import MIN_SDK,patch
 
 repo=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser()
 for name in ['apk','server','source','world','apktool','sdk','jdk','keystore']:
     p.add_argument('--'+name,type=Path,required=True)
+p.add_argument('--cosmetics',type=Path)
 p.add_argument('--alias',default='offline')
 p.add_argument('--out',type=Path,default=repo/'build/android')
 a=p.parse_args()
@@ -23,6 +24,7 @@ decoded=a.out/'decoded'
 run(java,'-jar',a.apktool,'d','-f',a.apk,'-o',decoded)
 patch(decoded)
 shutil.copy2(a.world,decoded/'assets/offline-world.zip')
+if a.cosmetics: shutil.copy2(a.cosmetics,decoded/'assets/offline-cosmetics.zip')
 base=a.out/'client-base.apk'
 run(java,'-jar',a.apktool,'b','-f',decoded,'-o',base)
 sources=list((repo/'android/src').rglob('*.java'))
@@ -45,7 +47,7 @@ with zipfile.ZipFile(a.server) as src,zipfile.ZipFile(engine,'w',zipfile.ZIP_DEF
         if name not in replacements:dst.writestr(name,src.read(name))
     for name,path in replacements.items():dst.write(path,name)
 dex=a.out/'dex';dex.mkdir()
-run(java,'-cp',buildtools/'lib/d8.jar','com.android.tools.r8.D8','--min-api','33','--lib',android,'--output',dex,engine)
+run(java,'-cp',buildtools/'lib/d8.jar','com.android.tools.r8.D8','--min-api',MIN_SDK,'--lib',android,'--output',dex,engine)
 unsigned=a.out/'unsigned.apk'
 with zipfile.ZipFile(base) as src,zipfile.ZipFile(unsigned,'w',zipfile.ZIP_DEFLATED) as dst:
     indices=[1 if name=='classes.dex' else int(re.fullmatch(r'classes(\d+)\.dex',name)[1]) for name in src.namelist() if re.fullmatch(r'classes\d*\.dex',name)]

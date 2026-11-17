@@ -1,0 +1,125 @@
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -30,6 +30,7 @@
+     }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+     private static JSONArray catalog = new JSONArray();
++    private static final java.util.Map<Short, Short> bodyEffects = new java.util.HashMap<>();
+ 
+     public static void loadItems() throws IOException {
+         try {
+@@ -58,6 +59,7 @@
+             }
+             if (!pumpkin) ItemTemplate3.item.add(item);
+             items.add(id);
++            if (row.containsKey("bodyEffect")) bodyEffects.put(id, number(row, "bodyEffect").shortValue());
+             if (row.containsKey("release")) itemReleases.put(id, number(row, "release").intValue());
+         }
+         loadMounts();
+@@ -104,8 +106,23 @@
+         return java.util.Collections.unmodifiableSet(mounts.keySet());
+     }
+ 
+-    public static void refreshIcon(Item3 item) {
+-        if (has(item.id)) item.icon = ItemTemplate3.item.get(item.id).getIcon();
++    public static void refreshSavedItem(Item3 item) {
++        if (!has(item.id)) return;
++        ItemTemplate3 template = ItemTemplate3.item.get(item.id);
++        item.icon = template.getIcon();
++        if (item.type != EquippedEffects.LANTERN_TYPE && (item.id < 4807 || item.id > 4813)) return;
++        item.part = template.getPart();
++        for (Option current : template.getOp()) {
++            int optionId = Byte.toUnsignedInt(current.id);
++            if (item.type == EquippedEffects.LANTERN_TYPE ? optionId < 7 || optionId > 11 : optionId != 29) continue;
++            item.op.removeIf(saved -> saved.id == current.id);
++            item.op.add(new Option(optionId, current.getParam(0)));
++        }
++    }
++
++    public static short bodyEffect(Player player) {
++        Item3 costume = player.item.wear[11];
++        return costume == null ? -1 : bodyEffects.getOrDefault(costume.id, (short) -1);
+     }
+ 
+     public static void loadFashion() {
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -497,7 +497,7 @@
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
+                 temp.restoreAchievementCloakOptions();
+-                OfflineSkins.refreshIcon(temp);
++                OfflineSkins.refreshSavedItem(temp);
+                 item.bag3[i] = temp;
+             }
+             jsar.clear();
+@@ -536,7 +536,7 @@
+                 }
+                 temp.time_use = 0;
+                 temp.restoreAchievementCloakOptions();
+-                OfflineSkins.refreshIcon(temp);
++                OfflineSkins.refreshSavedItem(temp);
+                 item.wear[Byte.parseByte(jsar2.get(9).toString())] = temp;
+             }
+             jsar.clear();
+@@ -626,7 +626,7 @@
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
+                 temp.restoreAchievementCloakOptions();
+-                OfflineSkins.refreshIcon(temp);
++                OfflineSkins.refreshSavedItem(temp);
+                 item.box3[i] = temp;
+             }
+             jsar.clear();
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -155,7 +155,7 @@
+     public static final java.util.Set<Integer> REMOVED_GOLD_STOCK = java.util.Set.of(
+         4587,4588,4589,4590,4656,4657,4658,4659,4660,4661,4662,4663,4664,4665,4666,4667,
+         4668,4669,4670,4671,4672,4673,4674,4675,4780,4781,4782,4783,4784,4785,4786,4787,4788,
+-        4719,4731,4807,4808,4809,4810,4811,4812,4813,4814,4843,4844);
++        4719,4731,4814,4843,4844);
+ 
+     public static List<ItemSellCoin> goldStock() {
+         return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -226,7 +226,7 @@
+         m.writer().writeShort(get_id_hair(p)); // idHair
+         m.writer().writeShort(get_id_wing(p)); // idWing
+         m.writer().writeShort(p.id_name); // idName
+-        m.writer().writeShort(-1); // idBody
++        m.writer().writeShort(template.OfflineSkins.bodyEffect(p)); // idBody
+         // m.writer().writeShort(-1); // idLeg
+         // m.writer().writeShort(-1); // idBienhinh
+         //
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1609,7 +1609,7 @@
+             m.writer().writeShort(Service.get_id_hair(p0)); // hair
+             m.writer().writeShort(Service.get_id_wing(p0)); // wing
+             m.writer().writeShort(p0.id_name); // id_name
+-            m.writer().writeShort(-1); // body
++            m.writer().writeShort(template.OfflineSkins.bodyEffect(p0)); // body
+             m.writer().writeShort(-1); // leg
+             m.writer().writeShort(-1); // bienhinh
+             p.conn.addmsg(m);
+--- a/src/main/java/template/Item3.java
++++ b/src/main/java/template/Item3.java
+@@ -121,14 +121,14 @@
+ 		}
+ 		int count = 0;
+ 		for (Option o : this.op) {
+-			if (o != null && (type == 15 || (type >= 21 && type <= 27) || ItemSellCoin.isTinhTu(id)
++			if (o != null && (type == 15 || (type >= 21 && type <= 27) || type == EquippedEffects.LANTERN_TYPE || ItemSellCoin.isTinhTu(id)
+ 					|| !isHiddenElementalOption(o.id, playerClazz))) {
+ 				count++;
+ 			}
+ 		}
+ 		m.writer().writeByte(count);
+ 		for (Option o : this.op) {
+-			if (o != null && (type == 15 || (type >= 21 && type <= 27) || ItemSellCoin.isTinhTu(id)
++			if (o != null && (type == 15 || (type >= 21 && type <= 27) || type == EquippedEffects.LANTERN_TYPE || ItemSellCoin.isTinhTu(id)
+ 					|| !isHiddenElementalOption(o.id, playerClazz))) {
+ 				int id = Byte.toUnsignedInt(o.id);
+ 				m.writer().writeByte(ItemSellCoin.isTinhTu(this.id) && TinhTu.isHidden(id)

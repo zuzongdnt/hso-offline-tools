@@ -16,7 +16,7 @@ shutil.copytree(args.upstream/'src',args.out/'src')
 shutil.copy2(args.upstream/'pom.xml',args.out/'pom.xml')
 for source in (args.out/'src').rglob('*.java'):
     source.write_text(source.read_text(encoding='utf-8-sig'),encoding='utf-8',newline='\n')
-patch=str(repo/'patches/server-offline.patch')
-subprocess.run(['git','-C',str(args.out),'apply','--check',patch],check=True)
-subprocess.run(['git','-C',str(args.out),'apply',patch],check=True)
+for name in ('server-offline.patch', 'server-offline-3.patch', 'server-offline-4.patch', 'server-offline-5.patch', 'server-offline-6.patch', 'server-offline-7.patch', 'server-offline-8.patch', 'server-offline-9.patch', 'server-offline-10.patch', 'server-offline-11.patch', 'server-offline-12.patch', 'server-offline-13.patch', 'server-offline-14.patch', 'server-offline-15.patch', 'server-offline-16.patch', 'server-offline-17.patch', 'server-offline-18.patch', 'server-offline-19.patch'):
+    patch=str(repo/'patches'/name)
+    subprocess.run(['git','-C',str(args.out),'apply',patch],check=True)
 print('Prepared patched server source:',args.out.resolve())

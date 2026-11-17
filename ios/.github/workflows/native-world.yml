@@ -1,0 +1,37 @@
+name: Check native offline world
+on:
+  workflow_dispatch:
+jobs:
+  startup:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gluonhq/setup-graalvm@3a9b11a45ef0ecad69107f5884b5dbbb7b806e1c
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          graalvm: '22.1.0.1-Final'
+          jdk: java17
+          arch: aarch64
+      - name: Compile native world
+        run: |
+          mvn -B package dependency:copy-dependencies -DincludeScope=runtime
+          native-image --no-fallback -H:+ReportExceptionStackTraces '-H:IncludeResources=.*SQLite.meta|.*sqlite-jdbc.properties|META-INF/services/.*' --initialize-at-run-time=core,client,map,template,ai,event,event_daily,gamble,io,offline,com.google.common.jimfs --initialize-at-build-time=com.google.common.jimfs.SystemJimfsFileSystemProvider -R:MaxHeapSize=512m -cp 'target/classes:target/dependency/*' -H:Name=native-world offline.NativeWorld
+      - name: Download sanitized startup fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir fixture
+          gh release download ios-native-fixture-20261116 -p '*.zip' -D fixture
+          mv fixture/native-startup-fixture.zip fixture/offline-world.zip
+      - name: Start native world and check connection
+        run: python3 ci/check_native_world.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-world-startup
+          path: startup.log
+          retention-days: 7

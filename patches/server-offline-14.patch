@@ -1,0 +1,139 @@
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -470,6 +470,7 @@
+                 JSONArray jsar2 = (JSONArray) JSONValue.parse(jsar.get(i).toString());
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                if (OfflineSkins.removed(temp.id)) continue;
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+                 temp.type = Byte.parseByte(jsar2.get(2).toString());
+                 temp.level = Short.parseShort(jsar2.get(3).toString());
+@@ -512,6 +513,7 @@
+                 }
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                if (OfflineSkins.removed(temp.id)) continue;
+                 temp.name = ItemTemplate3.item.get(temp.id).getName() + " [Khóa]";
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+                 temp.type = Byte.parseByte(jsar2.get(2).toString());
+@@ -599,6 +601,7 @@
+                 }
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                if (OfflineSkins.removed(temp.id)) continue;
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+                 temp.type = Byte.parseByte(jsar2.get(2).toString());
+                 temp.level = Short.parseShort(jsar2.get(3).toString());
+@@ -1750,6 +1753,10 @@
+     }
+ 
+     public void player_wear(Session conn2, Item3 temp3, int index_bag, byte index_wear) throws IOException {
++        if (OfflineSkins.removed(temp3.id)) {
++            Service.send_notice_box(conn2, "Vật phẩm ghép sai đã được gỡ khỏi bản offline.");
++            return;
++        }
+         byte b = -1;
+         switch (temp3.type) {
+             case 0: {// coat
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -253,17 +253,21 @@
+ 
+     public static short get_id_hair(Player p) {
+         short result = -1;
+-        if (p.item.wear[16] != null) {
++        if (p.item.wear[11] == null && p.item.wear[16] != null
++                && template.OfflineSkins.nativeHair(p) < 0) {
+             result = (short) (Byte.toUnsignedInt(p.item.wear[16].part) + 41);
+         }
+         return result;
+     }
+ 
+     public static void writeFashionParts(Message m, Player p) throws IOException {
+-        boolean hideHat = p.item.wear[16] != null || (p.item.wear[13] != null && p.fashion[2] == -1);
++        boolean showHair = p.item.wear[11] == null && p.item.wear[16] != null;
++        short nativeHair = template.OfflineSkins.nativeHair(p);
++        boolean hideHat = showHair || (p.item.wear[13] != null && p.fashion[2] == -1);
+         m.writer().writeByte(p.fashion.length);
+         for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeShort(i == 2 && hideHat ? -2 : get_fashion_part(p.fashion[i]));
++            m.writer().writeShort(i == 2 && hideHat ? -2
++                    : i == 5 && nativeHair >= 0 ? nativeHair : get_fashion_part(p.fashion[i]));
+         }
+     }
+ 
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -158,11 +158,11 @@
+         4719,4731,4814,4843,4844);
+ 
+     public static List<ItemSellCoin> goldStock() {
+-        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
++        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.removed(offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
+     }
+ 
+     public boolean available() {
+-        return OfflineSkins.has(id) || !MISSING_VISUALS.contains((int) id);
++        return !OfflineSkins.removed(id) && (OfflineSkins.has(id) || !MISSING_VISUALS.contains((int) id));
+     }
+ 
+     private static boolean cosmetic(int type) {
+@@ -277,6 +277,12 @@
+         // Official administrator screenshots: forum topic 6364555, pages 0 and 1.
+         String data = null;
+         switch (template.getId()) {
++            case 4634:
++                data = "[[7,4000],[8,4000],[9,4000],[10,4000],[11,4000],[38,3],[108,1],[111,1000],[122,10000]]"; break;
++            case 4633:
++                data = "[[23,39],[24,39],[25,39],[26,39],[37,3],[62,10000],[109,1800]]"; break;
++            case 4755:
++                data = "[[7,2500],[8,2500],[9,2500],[10,2500],[11,2500],[27,1500],[28,1500],[180,1000]]"; break;
+             case 3602: case 3603: case 3604: case 3605:
+                 data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[62,10000]]"; break;
+             case 3607: case 3608:
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -29,6 +29,14 @@
+         }
+     }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
++    private static final Set<Integer> REMOVED = Set.of(4849, 4854, 4855, 4858, 4861, 4862);
++    private static final Set<Integer> VERIFIED_OPTIONS = Set.of(4633, 4634, 4755);
++    public static boolean removed(int id) { return REMOVED.contains(id); }
++    public static short nativeHair(Player player) {
++        Item3 hair = player.item.wear[16];
++        if (player.item.wear[11] != null || hair == null || hair.id < 4807 || hair.id > 4813) return -1;
++        return new short[]{52, 53, 54, 55, 66, 67, 69}[hair.id - 4807];
++    }
+     private static JSONArray catalog = new JSONArray();
+     private static final Set<Short> refreshOptions = new HashSet<>();
+     private static final java.util.Map<Short, Short> transformEffects = new java.util.HashMap<>();
+@@ -66,6 +74,7 @@
+             if (row.containsKey("bodyEffect")) bodyEffects.put(id, number(row, "bodyEffect").shortValue());
+             if (row.containsKey("release")) itemReleases.put(id, number(row, "release").intValue());
+         }
++        ItemTemplate3.item.get(4755).setName("Tia sét ma thuật");
+         loadMounts();
+         if (OptionItem.entrys.size() == 191) {
+             for (String name : new String[]{"Lời nguyền Độc tố", "Lời nguyền Suy kiệt"}) {
+@@ -120,6 +129,11 @@
+     }
+ 
+     public static void refreshSavedItem(Item3 item) {
++        if (VERIFIED_OPTIONS.contains((int)item.id)) {
++            item.op.removeIf(option -> Byte.toUnsignedInt(option.id) < 58 || Byte.toUnsignedInt(option.id) > 60);
++            for (Option option : ItemSellCoin.cosmeticOptions(ItemTemplate3.item.get(item.id)))
++                item.op.add(new Option(option.id, option.getParam(0)));
++        }
+         if (!has(item.id)) return;
+         ItemTemplate3 template = ItemTemplate3.item.get(item.id);
+         item.icon = template.getIcon();
+@@ -178,7 +192,7 @@
+             for (Item3 item : group) if (item != null) owned.add(item.id);
+         }
+         var outfits = ItemSellCoin.entry.stream()
+-                .filter(offer -> !owned.contains(offer.id))
++                .filter(offer -> !removed(offer.id) && !owned.contains(offer.id))
+                 .filter(offer -> previous < 3 && wearableMounts.containsKey(offer.id)
+                         || itemReleases.getOrDefault(offer.id, 0) > previous
+                         || previous == 0 && has(offer.id) && !isCraftedArmor(offer.id) && offer.id != client.Pet.ID_CAT

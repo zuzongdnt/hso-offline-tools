@@ -1,10 +1,10 @@
 # HSO Offline Tools — Zuzong
 
-Mã sửa và công cụ build bản HSO offline độc lập trên Windows và Android 13 trở lên. Server chạy trên chính thiết bị; dữ liệu giữa các thiết bị không đồng bộ. Chưa có bản iOS offline.
+Mã sửa và công cụ build bản HSO offline độc lập trên Windows và Android 10 trở lên. Server chạy trên chính thiết bị, mỗi thiết bị có dữ liệu lưu riêng.
 
 ## Có gì trong repo
 
-- `patches/server-offline.patch`: các thay đổi trên server Java, gồm shop, Tinh Tú, pet và thưởng Zulu.
+- `patches/`: các thay đổi trên server Java, gồm shop, Tinh Tú, pet, thưởng Zulu và phó bản.
 - `android/src`: server SQLite trong ứng dụng, lớp tương thích JDBC, khởi động và tự lưu.
 - `pc/ClientPatcher`: sửa kết nối client PC về `127.0.0.1:19139`, danh sách Offline và thư mục lưu riêng.
 - `java-j2me`: [bản Java offline dành cho J2ME Loader trên Android 13+](java-j2me/README.md), dùng client online v403 và nhúng cùng bộ xử lý thế giới vào JAR.
@@ -12,6 +12,22 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 - `tests`: kiểm tra gói tin, mua đồ bằng vàng, nâng Tinh Tú và ấp trứng.
 
 Repo không chứa client/tài nguyên game, database nhân vật, tài khoản thật hoặc khóa ký APK. Cần chuẩn bị các đầu vào đó ở máy của bạn trong thư mục `inputs/` đã được bỏ qua bởi Git.
+
+## Offline 27
+
+`scripts/stage_offline27.py` tạo mã server 27 từ mã server 23 đã chuẩn bị ở `build/server-offline23`. Bản này giữ người bán mề đay +6 đến +10; mề đay +15 chỉ ở Mở Ly. Android chờ server offline sẵn sàng trước khi nối game để tránh lỗi kết nối lúc mở. Chi tiết đã kiểm tra và việc còn lại ở [OFFLINE27_TIEN_DO.md](OFFLINE27_TIEN_DO.md).
+
+iOS được build theo ba bước: `scripts/prepare_ios_server.py` ghép mã server vào dự án iOS; quy trình mẫu `ios/.github/workflows/build.yml` biên dịch thư viện `HSOOfflineWorld.dylib` arm64 bằng GraalVM trên macOS; `scripts/build_ios_ipa.py` ghép thư viện đó, dữ liệu thế giới và tài nguyên vào IPA gốc Tailscale v2 được cung cấp riêng. Thêm `--dream-fashion` để bật bản vá Hiệp sĩ Mộng Mơ. Quy trình mẫu nằm trong thư mục `ios`, cần chạy trong dự án iOS đã chuẩn bị, không tự chạy từ gốc repo này. IPA tạo ra chưa ký; phải ký và cài bằng iLoader. Chưa có IPA offline 27 và chưa kiểm tra trên iPhone thật.
+
+## Thay đổi trong offline.16
+
+- Dùng phần tóc gốc 52, 53, 54, 55, 66, 67, 69 cho bảy kiểu tóc nhập đầu tiên, giữ bảng vị trí và hướng nhìn gốc. Ngoại trang ở ô 11 che tóc riêng; tháo ngoại trang thì tóc riêng hiện lại và ẩn mũ trang bị.
+- Bỏ các dải icon ba khung tự ghép từ dáng ngoài map. Icon balo trở lại ảnh tĩnh; các bộ ngoại trang vẫn có đầu đầy đủ khi mặc.
+- Gỡ bốn món gán nhầm thành lồng đèn: mặt nạ nước, đầu sói lửa, kỳ lân đỏ, khúc xương. Gỡ hai bộ giáp bạc/đỏ tinh quang ghép thử chưa đúng bản gốc. ID cũ giữ làm mốc; các bản lưu bỏ sáu món này khi đăng nhập, gồm túi, rương và ô đang đeo. Sao lưu dữ liệu trước khi cập nhật.
+- Cập nhật các dòng theo ảnh người dùng cung cấp cho Mặt nạ Loki, Mặt nạ thổ dân, Tia sét ma thuật, Tóc thời trang Du Hiệp và Lồng đèn Lân Rước Đèn. Đồ đang có được cập nhật khi tải nhân vật.
+- Giữ các sửa chỉ số Cánh hồ ly, Chổi phép thuật và tóc Saiyan từ offline.15. Hai dòng Lời nguyền trên Chổi mới là thông tin chỉ số, chưa có xử lý kích hoạt. Chưa xác minh công thức giáp tím để khớp số trong ảnh +6; số khởi đầu hiện quay riêng 1–3% theo thông tin tạm từ người dùng.
+
+Đã qua kiểm tra hồi quy Java và giao thức thực trên giả lập Android 10: giá trị đồ, gỡ món cũ, ưu tiên ngoại trang/tóc và icon tĩnh. Đã xem tóc bạc ở hướng trước/nghiêng trong map. Chưa kiểm tra điện thoại thật hoặc toàn bộ động tác chiến đấu của từng kiểu tóc.
 
 ## Những lỗi đã sửa trong offline.2
 
@@ -67,7 +83,7 @@ $env:HSO_KEYSTORE_PASSWORD = 'mat-khau-keystore-cua-ban'
 python scripts/build_android.py --apk inputs/Knight_Online_Android-v403b.apk --server build/server/target/HSO_Re_2-1.0-jar-with-dependencies.jar --source build/server --world build/world/offline-world.zip --apktool inputs/apktool.jar --sdk C:/Android/Sdk --jdk C:/Java/jdk-17 --keystore inputs/offline.jks --alias offline
 ```
 
-APK kết quả nằm trong `build/android/HSO_Offline.apk`. Mỗi lần build chọn thư mục `--out` mới để giữ lại kết quả trước. App có package `com.zuzong.hso.offline403`, versionCode `214`. Để cập nhật app đã cài, phải dùng cùng khóa ký; repo không cung cấp khóa ký cá nhân.
+APK kết quả nằm trong `build/android/HSO_Offline.apk`. Mỗi lần build chọn thư mục `--out` mới để giữ lại kết quả trước. Bản offline.16 có package `com.zuzong.hso.offline403`, versionCode `228` và yêu cầu tối thiểu Android 10 (API 29). Dùng cùng khóa ký để cài cập nhật và giữ dữ liệu.
 
 ## Kiểm tra
 

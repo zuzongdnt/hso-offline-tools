@@ -1,0 +1,2147 @@
+--- a/src/main/java/client/Body.java
++++ b/src/main/java/client/Body.java
+@@ -124,7 +124,7 @@
+             if (temp != null) {
+                 for (Option op : temp.op) {
+                     if (op.id == id || op.id == byteId || Byte.toUnsignedInt(op.id) == id) {
+-                        param += op.getParam(temp.tier);
++                        param += temp.optionValue(op);
+                     }
+                 }
+             }
+@@ -172,7 +172,7 @@
+             }
+         }
+         percent += ((p.kinhmach[0] - 1) * 5 + p.kinhmach[1]) * 100;
+-        hpm += ((hpm * (percent / 100)) / 100);
++        hpm += (hpm * percent / 10_000);
+         if (p.type_use_mount == 11 || p.type_use_mount == 12 || p.type_use_mount == 13
+                 || (p.type_use_mount == 20 && (p.id_horse == 114 || p.id_horse == 121))) {
+             hpm += (hpm / 10);
+@@ -215,7 +215,7 @@
+             }
+         }
+         percent += ((p.kinhmach[0] - 1) * 5 + p.kinhmach[1]) * 100;
+-        mpm += ((mpm * (percent / 100)) / 100);
++        mpm += (mpm * percent / 10_000);
+         EffTemplate ef = p.get_eff(2);
+         if (ef != null) {
+             mpm = (mpm * 8) / 10;
+@@ -538,7 +538,7 @@
+             return 0;
+         }
+         dprop += (p.luyenthe * 20);
+-        dprop += ((dprop * (get_percent_dameProp(type) / 100)) / 100);
++        dprop += (dprop * get_percent_dameProp(type) / 10_000);
+         if (dprop > 2_000_000_000) {
+             dprop = 2_000_000_000;
+         }
+@@ -565,7 +565,7 @@
+                 break;
+             }
+         }
+-        dame += ((dame * (get_percent_damePhysical() / 100)) / 100);
++        dame += (dame * get_percent_damePhysical() / 10_000);
+         if (dame > 2_000_000_000) {
+             dame = 2_000_000_000;
+         }
+--- a/src/main/java/client/MessageHandler.java
++++ b/src/main/java/client/MessageHandler.java
+@@ -380,59 +380,26 @@
+                     mw.cleanup();
+                 }
+                 if (conn.p.map.ld != null) {
+-                    if (conn.p.map.ld.p1.id == conn.p.id) {
+-                        MapService.leave(conn.p.map, conn.p.map.ld.p1);
+-                        conn.p.map.ld.p1 = conn.p;
+-                    } else if (conn.p.map.ld.p2.id == conn.p.id) {
+-                        MapService.leave(conn.p.map, conn.p.map.ld.p2);
+-                        conn.p.map.ld.p2 = conn.p;
+-                    }
+-                    Message m3 = new Message(4);
+-                    if (conn.p.id == conn.p.map.ld.p1.id) {
+-                        m3.writer().writeByte(0);
+-                        m3.writer().writeShort(0);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.x);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.y);
+-                        m3.writer().writeByte(-1);
+-                    } else if (conn.p.id == conn.p.map.ld.p2.id) {
+-                        m3.writer().writeByte(0);
+-                        m3.writer().writeShort(0);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.x);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.y);
+-                        m3.writer().writeByte(-1);
+-                    } else {
+-                        m3.writer().writeByte(0);
+-                        m3.writer().writeShort(0);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.x);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.y);
+-                        m3.writer().writeByte(-1);
+-                        //
+-                        m3.writer().writeByte(0);
+-                        m3.writer().writeShort(0);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.x);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.y);
+-                        m3.writer().writeByte(-1);
+-                    }
+-                    //
+-                    conn.addmsg(m3);
+-                    m3.cleanup();
+-                    //
+-                    m3 = new Message(-103);
+-                    m3.writer().writeByte(1);
+-                    if (conn.p.id == conn.p.map.ld.p1.id) {
+-                        m3.writer().writeShort(conn.p.map.ld.p1.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p2.id);
+-                    } else {
+-                        m3.writer().writeShort(conn.p.map.ld.p2.id);
+-                        m3.writer().writeShort(conn.p.map.ld.p1.id);
+-                    }
+-                    conn.addmsg(m3);
+-                    m3.cleanup();
+-                    //
++                    if (conn.p.map.ld.p1 == conn.p) {
++                        Player opponent = conn.p.map.ld.p2;
++                        Message position = new Message(4);
++                        position.writer().writeByte(0);
++                        position.writer().writeShort(0);
++                        position.writer().writeShort(opponent.id);
++                        position.writer().writeShort(opponent.x);
++                        position.writer().writeShort(opponent.y);
++                        position.writer().writeByte(-1);
++                        conn.addmsg(position);
++                        position.cleanup();
++                        MapService.send_in4_other_char(conn.p.map, conn.p, opponent);
++                        Message sides = new Message(-103);
++                        sides.writer().writeByte(1);
++                        sides.writer().writeShort(conn.p.id);
++                        sides.writer().writeShort(opponent.id);
++                        conn.addmsg(sides);
++                        sides.cleanup();
++                        conn.p.map.ld.ready();
++                    }
+                     conn.p.map.ld.update_time_atk();
+                 }
+                 break;
+@@ -446,6 +413,10 @@
+             }
+             case 5: {
+                 int id = m.reader().readShort();
++                if (conn.p.map.ld != null && (short) conn.p.map.ld.p2.id == id) {
++                    MapService.send_in4_other_char(conn.p.map, conn.p, conn.p.map.ld.p2);
++                    break;
++                }
+                 Player p0 = null;
+                 if (id == -1) { // boss tg
+                     Manager.gI().bossTG.send_in4(conn.p);
+@@ -594,7 +565,6 @@
+ 
+                     p0.set_in4();
+                     conn.p = p0;
+-                    core.OfflineRewards.onLogin(p0);
+                     MessageHandler.dataloginmap(conn);
+                 } else {
+                     System.out.println("setup FAILED for player id=" + id_player_login);
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -275,7 +275,7 @@
+             }
+             //
+             
+-        pointarena = rs.getShort("pointarena");
++        pointarena = rs.getInt("pointarena");
+             this.name = rs.getString("name");
+             JSONArray jsar = (JSONArray) JSONValue.parse(rs.getString("body"));
+             if (jsar == null) {
+@@ -480,6 +480,7 @@
+                 if (jsar2.size() == 11) {
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
++                temp.restoreAchievementCloakOptions();
+                 item.bag3[i] = temp;
+             }
+             jsar.clear();
+@@ -517,6 +518,7 @@
+                             new Option(Byte.parseByte(jsar4.get(0).toString()), Integer.parseInt(jsar4.get(1).toString())));
+                 }
+                 temp.time_use = 0;
++                temp.restoreAchievementCloakOptions();
+                 item.wear[Byte.parseByte(jsar2.get(9).toString())] = temp;
+             }
+             jsar.clear();
+@@ -605,6 +607,7 @@
+                 if (jsar2.size() == 11) {
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
++                temp.restoreAchievementCloakOptions();
+                 item.box3[i] = temp;
+             }
+             jsar.clear();
+@@ -704,7 +707,7 @@
+             if (jsar == null) {
+                 return false;
+             }
+-            point_active = new int[jsar.size()];
++            point_active = new int[Math.max(4, jsar.size())];
+             for (int i = 0; i < jsar.size(); i++) {
+                 point_active[i] = Integer.parseInt(jsar.get(i).toString());
+             }
+@@ -727,7 +730,7 @@
+         return true;
+     }
+ 
+-    private void load_skill() throws IOException {
++    public void load_skill() throws IOException {
+         ByteArrayInputStream bais = null;
+         DataInputStream dis = null;
+         try {
+@@ -2650,7 +2653,7 @@
+ 			Message m = new Message(-95);
+ 			m.writer().writeByte(0);
+ 			m.writer().writeShort(this.id);
+-			m.writer().writeShort(this.pointarena);
++			m.writer().writeShort(Math.min(Short.MAX_VALUE, this.pointarena));
+ 			this.conn.addmsg(m);
+ 			m.cleanup();
+ 		}
+--- a/src/main/java/core/BXH.java
++++ b/src/main/java/core/BXH.java
+@@ -184,15 +184,27 @@
+     m.cleanup();
+     break;
+ }
+-case 3: { // BXH Hiếu Chiến
++case 3: {
+     Message m = new Message(56);
+     m.writer().writeByte(1);
+     m.writer().writeUTF("BXH CHIẾN TRƯỜNG");
+     m.writer().writeByte(99); // page
+-    m.writer().writeInt(0); // my index
+-    m.writer().writeByte(BXH_chientruong.size()); // num2
+-    for (Memin4 temp : BXH_chientruong) { // Thay BXH_chuyensinh thành BXH_hieuchien
+-        Player p0 = Map.get_player_by_name(temp.name);
++    List<Memin4> standings = new ArrayList<>(BXH_chientruong);
++    Player current = conn.p;
++    standings.removeIf(row -> row.name.equals(current.name));
++    Memin4 own = new Memin4();
++    own.name = current.name;
++    own.pointarena = current.pointarena;
++    own.itemwear = new ArrayList<>();
++    standings.add(0, own);
++    standings.sort(Comparator.comparingInt((Memin4 row) -> {
++        Player live = Map.get_player_by_name(row.name);
++        return live == null ? row.pointarena : live.pointarena;
++    }).reversed());
++    m.writer().writeInt(standings.indexOf(own));
++    m.writer().writeByte(Math.min(20, standings.size()));
++    for (Memin4 temp : standings.subList(0, Math.min(20, standings.size()))) {
++        Player p0 = temp == own ? current : Map.get_player_by_name(temp.name);
+         if (p0 != null) {
+             temp.head = p0.head;
+             temp.eye = p0.eye;
+@@ -221,7 +233,7 @@
+             m.writer().writeByte(it.type);
+         }
+         m.writer().writeByte((p0 != null) ? (byte) 1 : (byte) 0); // type online
+-        m.writer().writeUTF(temp.info); // Hiển thị thông tin, bao gồm điểm PK nếu cần
++        m.writer().writeUTF((p0 == null ? temp.pointarena : p0.pointarena) + " điểm chiến trường");
+         if (temp.clan != null) {
+             m.writer().writeShort(temp.clan.icon);
+             m.writer().writeUTF(temp.clan.name_clan_shorted);
+@@ -379,8 +391,8 @@
+         part.part = Byte.parseByte(jsar2.get(6).toString());
+         temp.itemwear.add(part);
+     }
+-    int pointarena = rs.getInt("pointarena");
+-    temp.info = pointarena + " Điểm";
++    temp.pointarena = rs.getInt("pointarena");
++    temp.info = temp.pointarena + " Điểm";
+     temp.clan = Clan.get_clan_of_player(temp.name);
+     BXH_chientruong.add(temp);
+ }
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -22,6 +22,10 @@
+ 
+ public class GameSrc {
+ 
++    // Matches the cường hóa prices and ingredients in the client metadata (packet 61).
++    private static final int[] REBUILD_GOLD = {3000, 3000, 3000, 4000, 4000, 4000, 6000, 6000, 6000, 6000, 8000, 8000, 8000, 8000, 8000};
++    private static final int[] REBUILD_GEMS = {4, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7};
++
+     public static byte[] percent = new byte[]{95, 90, 80, 70, 60, 50, 45, 35, 25, 15, 10, 5, 4, 3, 2, 1};
+     public static short[] wing_upgrade_material_long_khuc_xuong = new short[]{10, 12, 15, 19, 24, 30, 37, 45, 54, 64,
+         75, 87, 100, 114, 129, 145, 162, 180, 199, 219, 240, 262, 285, 309, 334, 360, 387, 415, 444, 474};
+@@ -39,10 +43,8 @@
+         byte type = m2.reader().readByte();
+         short id = m2.reader().readShort();
+         byte tem = m2.reader().readByte(); // type item insert
+-        // System.out.println(type);
+-        // System.out.println(id);
+-        // System.out.println(tem);
+-        if (tem == 7 && conn.p.id_item_rebuild == -1) {
++        Item3 selected = rebuildableItem(conn.p, conn.p.id_item_rebuild);
++        if (tem == 7 && selected == null) {
+             Service.send_notice_nobox_white(conn, "Bỏ đồ đập vào trước nhá");
+             return;
+         }
+@@ -53,9 +55,13 @@
+             }
+             Message m = new Message(67);
+             m.writer().writeByte(type);
+-            int tier = conn.p.item.bag3[conn.p.id_item_rebuild].tier;
++            int tier = selected.tier;
+             switch (type) {
+                 case 0: {
++                    if (conn.p.item.total_item_by_id(7, id) < 1) {
++                        Service.send_notice_box(conn, "Không có vật phẩm may mắn này.");
++                        return;
++                    }
+                     m.writer().writeShort(id);
+                     conn.p.id_use_mayman = id;
+                     m.writer().writeByte(7);
+@@ -80,20 +86,24 @@
+         } else {
+             Message m = new Message(67);
+             Message m12 = null;
+-            if (type == 2 && !checkmaterial(conn, conn.p.id_item_rebuild, tem)) {
++            String problem = null;
++            if (type == 2) {
++                if (conn.p.time_speed_rebuild > System.currentTimeMillis()) {
++                    if (++conn.p.enough_time_disconnect > 2) conn.close();
++                    return;
++                }
++                problem = payForRebuild(conn, selected, tem);
++            }
++            if (problem != null) {
+                 m.writer().writeByte(3);
+-                if (conn.p.get_vang() < 10_000 || conn.p.get_ngoc() < 10) {
+-                    m.writer().writeUTF("Vàng trên 10k và ngọc trên 10 mới có thể tiếp tục kk");
+-                } else {
+-                    m.writer().writeUTF("Mi còn thiếu nguyên liệu...");
+-                }
++                m.writer().writeUTF(problem);
+             } else {
+                 m.writer().writeByte(type);
+                 switch (type) {
+                     case 0: {
+-                        Item3 it = conn.p.item.bag3[id];
+-                        if (it == null || !check_item_can_rebuild(it.type)) {
+-                            Service.send_notice_box(conn, "Không hợp lệ!");
++                        Item3 it = tem == 3 ? rebuildableItem(conn.p, id) : null;
++                        if (it == null) {
++                            Service.send_notice_box(conn, "Chọn trang bị dưới +15 trong hành trang để cường hóa.");
+                             return;
+                         }
+                         m.writer().writeShort(id);
+@@ -119,20 +129,12 @@
+                         break;
+                     }
+                     case 2: {
+-                        if (conn.p.time_speed_rebuild > System.currentTimeMillis()) {
+-                            if (++conn.p.enough_time_disconnect > 2) {
+-                                conn.close();
+-                            }
+-                            return;
+-                        }
+                         conn.p.time_speed_rebuild = System.currentTimeMillis() + 4500L;
+                         conn.p.enough_time_disconnect = 0;
+-                        Item3 it_upgrade = conn.p.item.bag3[conn.p.id_item_rebuild];
+-                        if (it_upgrade == null) {
+-                            return;
+-                        }
+-                        if (it_upgrade.tier > 14) {
+-                            return;
++                        Item3 it_upgrade = selected;
++                        if (conn.p.is_use_mayman && conn.p.item.total_item_by_id(7, conn.p.id_use_mayman) < 1) {
++                            conn.p.is_use_mayman = false;
++                            conn.p.id_use_mayman = -1;
+                         }
+                         boolean percent;
+                         int get_percent = GameSrc.percent[it_upgrade.tier];
+@@ -265,102 +267,40 @@
+         return false;
+     }
+ 
+-    private static boolean checkmaterial(Session conn, short id, byte tem) throws IOException {
+-        if (conn.p.get_vang() < 10_000 || conn.p.get_ngoc() < 10) {
+-            return false;
++    private static Item3 rebuildableItem(Player player, int slot) {
++        if (slot < 0 || slot >= player.item.bag3.length) return null;
++        Item3 item = player.item.bag3[slot];
++        return item != null && item.tier >= 0 && item.tier < 15 && check_item_can_rebuild(item.type)
++                ? item : null;
++    }
++
++    private static String payForRebuild(Session conn, Item3 item, byte currency) throws IOException {
++        if (item == null) return "Chọn trang bị cần cường hóa trong hành trang.";
++        int tier = item.tier;
++        if (currency == 0) {
++            if (conn.p.get_vang() < REBUILD_GOLD[tier]) return "Cần " + REBUILD_GOLD[tier] + " vàng.";
++        } else if (currency == 1) {
++            if (conn.p.get_ngoc() < REBUILD_GEMS[tier]) return "Cần " + REBUILD_GEMS[tier] + " ngọc.";
++        } else {
++            return "Chọn cường hóa bằng vàng hoặc ngọc.";
+         }
+-        if (!conn.p.item.bag3[id].islock) {
+-            conn.p.item.bag3[id].islock = true;
+-            conn.p.item.bag3[id].name = ItemTemplate3.item.get(conn.p.item.bag3[id].id).getName() + " [Khóa]";
++
++        short[] materials = tier < 6 ? new short[]{0, 1}
++                : tier < 11 ? new short[]{0, 1, 2} : new short[]{0, 1, 2, 3};
++        for (short id : materials) {
++            if (conn.p.item.total_item_by_id(7, id) < 1)
++                return "Còn thiếu " + ItemTemplate7.item.get(id).getName() + ".";
+         }
+-        Item3 it3 = conn.p.item.bag3[id];
+-        switch (it3.tier) {
+-            case 0:
+-            case 1:
+-            case 2: {
+-                if (tem == 0) {
+-
+-                } else {
+-                    conn.p.update_ngoc(-4);
+-                }
+-                if (conn.p.item.total_item_by_id(7, 0) > 0 && conn.p.item.total_item_by_id(7, 1) > 0) {
+-                    conn.p.item.remove(7, 0, 1);
+-                    conn.p.item.remove(7, 1, 1);
+-                    updatematerial(conn, 7, new short[]{0, 1});
+-                    return true;
+-                }
+-                break;
+-            }
+-            case 3:
+-            case 4:
+-            case 5: {
+-                if (tem == 0) {
+-                } else {
+-                    conn.p.update_ngoc(-5);
+-                }
+-                if (conn.p.item.total_item_by_id(7, 0) > 0 && conn.p.item.total_item_by_id(7, 1) > 0) {
+-                    conn.p.item.remove(7, 0, 1);
+-                    conn.p.item.remove(7, 1, 1);
+-                    updatematerial(conn, 7, new short[]{0, 1});
+-                    return true;
+-                }
+-                break;
+-            }
+-            case 6:
+-            case 7:
+-            case 8: {
+-                if (tem == 0) {
+-                } else {
+-                    conn.p.update_ngoc(-6);
+-                }
+-                if (conn.p.item.total_item_by_id(7, 0) > 0 && conn.p.item.total_item_by_id(7, 1) > 0
+-                        && conn.p.item.total_item_by_id(7, 2) > 0) {
+-                    conn.p.item.remove(7, 0, 1);
+-                    conn.p.item.remove(7, 1, 1);
+-                    conn.p.item.remove(7, 2, 1);
+-                    updatematerial(conn, 7, new short[]{0, 1, 2});
+-                    return true;
+-                }
+-                break;
+-            }
+-            case 9:
+-            case 10: {
+-                if (tem == 0) {
+-                } else {
+-                    conn.p.update_ngoc(-7);
+-                }
+-                if (conn.p.item.total_item_by_id(7, 0) > 0 && conn.p.item.total_item_by_id(7, 1) > 0
+-                        && conn.p.item.total_item_by_id(7, 2) > 0) {
+-                    conn.p.item.remove(7, 0, 1);
+-                    conn.p.item.remove(7, 1, 1);
+-                    conn.p.item.remove(7, 2, 1);
+-                    updatematerial(conn, 7, new short[]{0, 1, 2});
+-                    return true;
+-                }
+-                break;
+-            }
+-            case 11:
+-            case 12:
+-            case 13:
+-            case 14: {
+-                if (tem == 0) {
+-                    
+-                } else {
+-                    
+-                }
+-                if (conn.p.item.total_item_by_id(7, 0) > 0 && conn.p.item.total_item_by_id(7, 1) > 0
+-                        && conn.p.item.total_item_by_id(7, 2) > 0 && conn.p.item.total_item_by_id(7, 3) > 0) {
+-                    conn.p.item.remove(7, 0, 1);
+-                    conn.p.item.remove(7, 1, 1);
+-                    conn.p.item.remove(7, 2, 1);
+-                    conn.p.item.remove(7, 3, 1);
+-                    updatematerial(conn, 7, new short[]{0, 1, 2, 3});
+-                    return true;
+-                }
+-                break;
+-            }
++
++        if (currency == 0) conn.p.update_vang(-REBUILD_GOLD[tier]);
++        else conn.p.update_ngoc(-REBUILD_GEMS[tier]);
++        for (short id : materials) conn.p.item.remove(7, id, 1);
++        if (!item.islock) {
++            item.islock = true;
++            item.name = ItemTemplate3.item.get(item.id).getName() + " [Khóa]";
+         }
+-        return false;
++        updatematerial(conn, 7, materials);
++        return null;
+     }
+ 
+     private static void updatematerial(Session conn, int b, short[] id) throws IOException {
+@@ -1093,7 +1033,11 @@
+ 						itbag.name = temp.getName();
+ 						itbag.tier = 0;
+ 						//
+-                        itbag.op = new ArrayList<>();
++                        itbag.op = TinhTu.baseOptions(temp, color_);
++                        if (color_ >= 3) {
++                            itbag.op.add(new Option(129, 10_000));
++                            itbag.op.add(new Option(130, Util.random(1, 901)));
++                        }
+                         int[] hiddenIds = switch (index_create) {
+                             case 1 -> new int[]{154, 143, 151};
+                             case 2, 3 -> new int[]{147, 148, 149, 146, 145};
+@@ -1104,7 +1048,7 @@
+                             case 4 -> new int[]{152, 153, 165};
+                             default -> throw new IllegalArgumentException("Invalid Tinh Tu slot");
+                         };
+-                        int hiddenCount = color_ == 4 ? Util.random(1, 3) : color_ == 5 ? Util.random(2, 4) : 0;
++                        int hiddenCount = color_ == 4 ? Util.random(3) : color_ == 5 ? Util.random(4) : 0;
+                         for (int i = 0; i < hiddenCount; i++) {
+                             int pick = Util.random(i, hiddenIds.length);
+                             int optionId = hiddenIds[pick];
+@@ -1114,11 +1058,7 @@
+                                     ? 60_000 : Util.random(10, 300);
+                             itbag.op.add(new Option(optionId, value));
+                         }
+-                        for (Option option : temp.getOp()) {
+-                            itbag.op.add(new Option(option.id, TinhTu.rollStat(option.getParam(0))));
+-                        }
+-                        itbag.op.add(new Option(129, 10_000));
+-                        if (color_ >= 3) itbag.op.add(new Option(130, Util.random(9) * 100 + 100));
++
+ 						itbag.time_use = 0;
+ 						conn.p.item.add_item_bag3(itbag);
+ 						Message m = new Message(-105);
+--- a/src/main/java/core/MenuController.java
++++ b/src/main/java/core/MenuController.java
+@@ -93,9 +93,11 @@
+             }
+             case -81: {
+                 if (conn.p.is_detu_training) {
+-                    menu = new String[]{"Ngừng Luyện Đệ Tử", "Đăng ký lôi đài", "Vào lôi đài", "Xem lôi đài", "Thông tin", "Xem điểm lôi đài", "Huong dan", "Tháo ngọc khảm", "Vào map boss", "Top Dame Boss TG", "Nhận quà top dame boss"};
++                    menu = new String[]{"Ngừng luyện đệ tử"};
+                 } else {
+-                    menu = new String[]{"Luyện Đệ Tử", "Đăng ký lôi đài", "Vào lôi đài", "Xem lôi đài", "Thông tin", "Xem điểm lôi đài", "Huong dan", "Tháo ngọc khảm", "Vào map boss", "Top Dame Boss TG", "Nhận quà top dame boss"};
++                    menu = new String[]{"Luyện đệ tử", "Luật Lôi đài", "Vào Lôi đài", "Xem điểm Lôi đài",
++                        "Nhận quà thử", "TikTok: thinhdzuong", "Đổi quà theo điểm", "Tháo ngọc khảm",
++                        "Vào map Boss", "Top sát thương Boss", "Nhận quà Top Boss"};
+                 }
+                 break;
+             }
+@@ -147,10 +149,10 @@
+             }
+             case -8: {
+                 if (conn.p.type_exp == 1) {
+-                    menu = new String[]{"Cửa Hàng Tóc", "Điểm danh hàng ngày", "Đổi coin sang ngọc", "Đổi coin sang vàng",
++                    menu = new String[]{"Cửa Hàng Tóc", "Điểm danh offline", "Đổi coin sang ngọc", "Đổi coin sang vàng",
+                         "Đăng ký treo chống pk", "Tgian còn lại", "Tắt nhận exp", "Đổi phái", "Cộng tiềm năng", "Xem Điểm Tiềm Năng"};
+                 } else {
+-                    menu = new String[]{"Cửa Hàng Tóc", "Điểm danh hàng ngày", "Đổi coin sang ngọc", "Đổi coin sang vàng",
++                    menu = new String[]{"Cửa Hàng Tóc", "Điểm danh offline", "Đổi coin sang ngọc", "Đổi coin sang vàng",
+                         "Đăng ký treo chống pk", "Tgian còn lại", "Bật nhận exp", "Đổi phái", "Cộng tiềm năng", "Xem Điểm Tiềm Năng"};
+                 }
+                 break;
+@@ -543,7 +545,9 @@
+             }
+             case 998: {
+                 if (index == 0) {
+-                    if (ChienTruong.gI().getStatus() == 1) {
++                    if (ChienTruong.gI().get_infor_register(conn.p.name) != null) {
++                        Service.send_notice_box(conn, "Bạn đã đăng ký Chiến trường.");
++                    } else if (ChienTruong.gI().getStatus() == 1 && conn.status == 0) {
+                         if (conn.p.get_vang() < 1_000_000) {
+                             Service.send_notice_box(conn, "Không đủ 1.000.000 vàng");
+                             return;
+@@ -555,7 +559,9 @@
+                         Service.send_notice_box(conn, "Không trong thời gian diễn ra");
+                     }
+                 } else if (index == 1) {
+-                    if (ChienTruong.gI().getStatus() == 1) {
++                    if (ChienTruong.gI().get_infor_register(conn.p.name) != null) {
++                        Service.send_notice_box(conn, "Bạn đã đăng ký Chiến trường.");
++                    } else if (ChienTruong.gI().getStatus() == 1 && conn.status == 0) {
+                         if (conn.p.get_ngoc() < 500) {
+                             Service.send_notice_box(conn, "Không đủ 500 ngọc");
+                             return;
+@@ -921,77 +927,11 @@
+     }
+ 
+     private static void Menu_View_LoiDai(Session conn, byte index) throws IOException {
+-        if (conn.p.is_detu_training) {
+-            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể xem Lôi Đài!");
+-            return;
+-        }
+-        if (LoiDai.state != 1) {
+-            Service.send_notice_box(conn, "Không trong thời gian diễn ra lôi đài");
+-            return;
+-        }
+-        Map map = LoiDai.get_map_view_loidai(index);
+-        if (map != null) {
+-            if (map.ld.p1.name.equals(conn.p.name) || map.ld.p2.name.equals(conn.p.name)) {
+-                Service.send_notice_box(conn, "Đã đăng ký thì không được xuống ngồi làm khán giả");
+-                return;
+-            }
+-            MapService.change_flag(map, conn.p, -1);
+-            conn.p.typepk = -1;
+-            //
+-            conn.p.is_changemap = false;
+-            //
+-            MapService.leave(conn.p.map, conn.p);
+-            conn.p.map = map;
+-            conn.p.x = 360;
+-            conn.p.y = 396;
+-            MapService.enter(conn.p.map, conn.p);
+-        } else {
+-            Service.send_notice_box(conn, "Đã xảy ra lỗi");
+-        }
++        Service.send_notice_box(conn, "Lôi đài offline chỉ dành cho người chơi và bot trong trận.");
+     }
+ 
+     private static void Menu_Mrs_Oda_trong_LoiDai(Session conn, byte index) throws IOException {
+-        if (conn.p.is_detu_training) {
+-            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia Lôi Đài!");
+-            return;
+-        }
+-        switch (index) {
+-            case 0: {
+-                if (conn.p.map.ld.p1.id == conn.p.id) {
+-                    Player p0 = new Player(new Session(new Socket()), conn.p.id);
+-                    p0.setup();
+-                    p0.set_in4();
+-                    p0.map = conn.p.map;
+-                    p0.x = conn.p.x;
+-                    p0.y = conn.p.y;
+-                    conn.p.map.ld.p1 = p0;
+-                    synchronized (conn.p.map) {
+-                        conn.p.map.players.add(p0);
+-                    }
+-                } else if (conn.p.map.ld.p2.id == conn.p.id) {
+-                    Player p0 = new Player(new Session(new Socket()), conn.p.id);
+-                    p0.setup();
+-                    p0.set_in4();
+-                    p0.map = conn.p.map;
+-                    p0.x = conn.p.x;
+-                    p0.y = conn.p.y;
+-                    conn.p.map.ld.p2 = p0;
+-                    synchronized (conn.p.map) {
+-                        conn.p.map.players.add(p0);
+-                    }
+-                }
+-                Vgo vgo = new Vgo();
+-                vgo.id_map_go = 1;
+-                vgo.x_new = 432;
+-                vgo.y_new = 354;
+-                conn.p.change_map(conn.p, vgo);
+-                break;
+-            }
+-            default: {
+-                Service.send_notice_box(conn, "Chưa có chức năng");
+-                break;
+-            }
+-        }
++        if (index == 0) conn.p.map.ld.leave(conn.p);
+     }
+ 
+     private static void Menu_Mrs_Oda(Session conn, byte index) throws IOException {
+@@ -1016,107 +956,26 @@
+             }
+             return;
+         }
+-        // Offset remaining options by 1
+         switch (index - 1) {
+-            case 0: {
+-                if (conn.p.get_ngoc() < 5) {
+-                    Service.send_notice_box(conn, "Không đủ 5 ngọc");
+-                    return;
+-                }
+-                if (LoiDai.state != 0) {
+-                    Service.send_notice_box(conn, "Không trong thời gian đăng ký");
+-                    return;
+-                }
+-                if (LoiDai.check_register(conn.p)) {
+-                    Service.send_notice_box(conn, "Đã có tên trong danh sách đăng ký");
+-                    return;
+-                }
+-                if (LoiDai.size_register() >= 16) {
+-                    Service.send_notice_box(conn, "Số lượng đăng ký đã đầy, hãy quay lại vào lần tới");
+-                    return;
+-                }
+-                if (conn.p.level < 30) {
+-                    Service.send_notice_box(conn, "Không đủ level");
+-                    return;
+-                }
+-                conn.p.update_ngoc(-5);
+-                conn.p.item.char_inventory(5);
+-                Service.send_notice_box(conn, "Đợi trong giây lát....");
+-                LoiDai.add_name_register(conn.p);
+-                Service.send_notice_box(conn, "Đăng ký thành công!");
+-                Player p = conn.p;
+-                if (p.quest_daily[0] == 1 && p.quest_daily[3] < p.quest_daily[4]) {
+-                    p.quest_daily[3]++;
+-                }
+-                break;
+-            }
+-            case 1: {
+-                if (LoiDai.state != 1) {
+-                    Service.send_notice_box(conn, "Không trong thời gian diễn ra lôi đài");
+-                    return;
+-                }
+-                // if (!LoiDai.check_register(conn.p)) {
+-                // Service.send_notice_box(conn, "Không có tên trong danh sách đăng ký");
+-                // return;
+-                // }
+-                Map map = LoiDai.get_map_atk_loidai(conn.p);
+-                if (map != null) {
+-                    conn.p.is_changemap = false;
+-                    //
+-                    MapService.leave(conn.p.map, conn.p);
+-                    conn.p.map = map;
+-                    if (conn.p.id == map.ld.p1.id) {
+-                        conn.p.x = map.ld.p1.x;
+-                        conn.p.y = map.ld.p1.y;
+-                        conn.p.hp = map.ld.p1.hp;
+-                        conn.p.isdie = map.ld.p1.isdie;
+-                    } else {
+-                        conn.p.x = map.ld.p2.x;
+-                        conn.p.y = map.ld.p2.y;
+-                        conn.p.hp = map.ld.p2.hp;
+-                        conn.p.isdie = map.ld.p2.isdie;
+-                    }
+-                    conn.p.typepk = 0;
+-                    MapService.enter(conn.p.map, conn.p);
+-                    //
+-                } else {
+-                    Service.send_notice_box(conn, "Không có tên trong danh sách đăng ký");
+-                }
+-                break;
+-            }
+-            case 2: {
+-                send_menu_select(conn, 118, LoiDai.get_list_loidai_is_atk());
+-                // Vgo vgo = new Vgo();
+-                // vgo.id_map_go = 102;
+-                // vgo.x_new = 360;
+-                // vgo.y_new = 396;
+-                // conn.p.change_map(conn.p, vgo);
+-                break;
+-            }
+-            case 3: {
+-                String notice = "Hiện tại : \n";
+-                switch (LoiDai.state) {
+-                    case 0: {
+-                        notice += "thời gian đăng ký còn " + (LoiDai.time_state) + "s nữa\n";
+-                        notice += "Danh sách đăng ký : \n" + LoiDai.get_list_register();
+-                        break;
+-                    }
+-                    case 1: {
+-                        notice += "thời gian diễn ra lôi đài được " + (0 - LoiDai.time_state) + "s";
+-                        break;
+-                    }
+-                    case 2: {
+-                        notice += LoiDai.get_notice_break_time();
+-                        break;
+-                    }
+-                }
+-                Service.send_notice_box(conn, notice);
+-                break;
+-            }
+-            case 4: {
+-                Service.send_notice_box(conn, "Điểm lôi đài hiện tại: " + conn.p.point_active[2]);
+-                break;
+-            }
++            case 0:
++                Service.send_notice_box(conn, "Từ cấp 50. Ghép bot ngẫu nhiên cùng nhóm cấp, như 5x hoặc 6x. "
++                        + "Tối đa 3 hiệp. Thắng trận được 30 điểm Lôi đài.");
++                break;
++            case 1:
++                LoiDai.start(conn.p);
++                break;
++            case 2:
++                Service.send_notice_box(conn, "Bạn có " + conn.p.point_active[2] + " điểm Lôi đài.");
++                break;
++            case 3:
++                LoiDai.claimTestReward(conn.p);
++                break;
++            case 4:
++                Service.send_notice_box(conn, "TikTok: thinhdzuong");
++                break;
++            case 5:
++                LoiDai.claimRankReward(conn.p);
++                break;
+             case 6: {
+                 conn.p.list_thao_kham_ngoc.clear();
+                 for (int i = 0; i < conn.p.item.wear.length; i++) {
+@@ -1207,7 +1066,7 @@
+                             td = td2;
+                             break;
+                         } else {
+-                            Service.send_notice_box(conn, "Đã nhận rồi, khôn vừa thôi!");
++                            Service.send_notice_box(conn, "Bạn đã nhận phần thưởng này rồi.");
+                             return;
+                         }
+                     }
+@@ -1953,7 +1812,7 @@
+                 }
+                 case 2: {
+                     Service.send_box_input_yesno(conn, 116,
+-                            "Hãy xác nhận việc hủy bang, đừng hối hận khóc lóc xin admin khôi phục lại nhá!");
++                            "Bạn có chắc muốn giải tán bang hội?");
+                     break;
+                 }
+                 case 3: {
+@@ -2006,7 +1865,7 @@
+                     } else {
+                         Service.send_notice_box(conn, "Có lỗi xảy ra, hãy thử chọn lại!");
+                     }
+-                    Service.send_notice_box(conn, "gà thật, éo dám đi tiếp à");
++                    Service.send_notice_box(conn, "Bạn có thể thử sức lại ở lượt phó bản sau.");
+                     break;
+                 }
+                 case 2: {
+@@ -4288,7 +4147,7 @@
+         }
+         switch (index) {
+             case 0: { // dang ky
+-                send_menu_select(conn, 998, new String[]{"Đăng ký bằng 500.000 vàng", "Đăng ký bằng 2 ngọc"});
++                send_menu_select(conn, 998, new String[]{"Đăng ký bằng 1.000.000 vàng", "Đăng ký bằng 500 ngọc"});
+                 break;
+             }
+             case 1: {
+--- a/src/main/java/core/OfflineRewards.java
++++ b/src/main/java/core/OfflineRewards.java
+@@ -2,16 +2,13 @@
+ import client.Player;
+ import java.io.IOException;
+ public final class OfflineRewards {
+-    public static final long GOLD = 100000000000L;
+-    public static final int GEMS = 1000000000;
+-    public static void onLogin(Player p) {
+-        if (p.get_vang() < GOLD) p.update_vang(GOLD-p.get_vang());
+-        p.update_ngoc((long)GEMS-p.get_ngoc());
+-    }
++    public static final long GOLD = 1_000_000_000L;
++    public static final int GEMS = 100_000;
++
+     public static void checkIn(Player p) throws IOException {
+         p.update_vang(GOLD);
+-        p.update_ngoc((long)GEMS-p.get_ngoc());
++        p.update_ngoc(GEMS);
+         p.item.char_inventory(5);
+-        Service.send_notice_box(p.conn,"Offline: nhận 100 tỷ vàng, ví đủ 1 tỷ ngọc. Có thể điểm danh tiếp ngay.");
++        Service.send_notice_box(p.conn, "Bạn nhận 1 tỷ vàng và 100.000 ngọc. Có thể điểm danh tiếp ngay.");
+     }
+ }
+--- a/src/main/java/core/SaveData.java
++++ b/src/main/java/core/SaveData.java
+@@ -440,7 +440,7 @@
+                         }
+                         ps.setNString(37, jsar.toJSONString());
+                         jsar.clear();
+-                        ps.setShort(38, (short) p0.pointarena);
++                        ps.setInt(38, p0.pointarena);
+ 
+                         for (int i = 0; i < p0.tinhtu_material.length; i++) {
+                             jsar.add(p0.tinhtu_material[i]);
+--- a/src/main/java/core/ServerManager.java
++++ b/src/main/java/core/ServerManager.java
+@@ -11,7 +11,6 @@
+ import event.BossEvent;
+ import event_daily.ChienTruong;
+ import event_daily.CongNap;
+-import event_daily.LoiDai;
+ import io.Session;
+ import java.util.ArrayList;
+ import java.util.logging.Level;
+@@ -108,10 +107,10 @@
+                         Mob_in_map.create_boss();
+                     }
+                     if (min % 7 == 0 && sec == 0) {
+-                        Manager.gI().chatKTGprocess("Zuzong Local - may chu rieng tren may tinh");
++                        Manager.gI().chatKTGprocess("HSO Offline · TikTok: thinhdzuong");
+                     }
+                     if (min % 11 == 0 && sec == 0) {
+-                        Manager.gI().chatKTGprocess("Nhận điểm danh hàng ngày tại NPC Zulu, Đến Top BXH để xem thông tin cá nhân");
++                        Manager.gI().chatKTGprocess("Gặp Zulu để điểm danh offline. Gặp NPC Top BXH để xem xếp hạng.");
+                     }
+                     if (min % 17 == 0 && sec == 0) {
+                         Manager.gI().chatKTGprocess("Chat '/help' Để Xem Danh Sách Dòng Lệnh");
+@@ -170,7 +169,6 @@
+                         ChienTruong.gI().open_register();
+                     }
+                     if (sec % 1 == 0) {
+-                        LoiDai.update_state();
+                         ChienTruong.gI().update();
+                     }
+ 
+--- a/src/main/java/event_daily/ChienTruong.java
++++ b/src/main/java/event_daily/ChienTruong.java
+@@ -284,7 +284,7 @@
+ 				dem--;
+ 			}
+ 		}
+-		if (dem <= 1) {
++		if (dem <= 1 && this.time > 5) {
+ 			this.time = 5;
+ 			for (Entry<String, Member_ChienTruong> en : this.list.entrySet()) {
+ 				Player p0 = Map.get_player_by_name(en.getKey());
+@@ -351,8 +351,8 @@
+ 					list_receiv.add(p0);
+ 				}
+ 			}
+-			long vang_re = this.vang / (list_receiv.size() < 0 ? 1 : list_receiv.size());
+-			long ngoc_re = this.ngoc / (list_receiv.size() < 0 ? 1 : list_receiv.size());
++			long vang_re = this.vang / (Math.max(1, list_receiv.size()));
++			long ngoc_re = this.ngoc / (Math.max(1, list_receiv.size()));
+ 			list_receiv.forEach(l -> {
+ 				if (l.conn != null) {
+ 					l.update_vang(vang_re);
+@@ -391,7 +391,7 @@
+ 			this.BXH.sort(new Comparator<Member_ChienTruong>() {
+ 				@Override
+ 				public int compare(Member_ChienTruong o1, Member_ChienTruong o2) {
+-					return o1.point > o2.point ? -1 : 1;
++					return Integer.compare(o2.point, o1.point);
+ 				}
+ 			});
+ 			//
+@@ -415,7 +415,7 @@
+ 			temp.village = 0;
+ 			temp.received = false;
+ 			this.list.put(p.name, temp);
+-			Service.send_notice_box(p.conn, "Đăng Ký Thành Công, Vui Lòng Đăng Nhập Game Trước 21:30 Để Tham Gia Chiến Trường!");
++			Service.send_notice_box(p.conn, "Bạn đã đăng ký. Quay lại gặp Mr Ballard khi Chiến trường bắt đầu.");
+ 			//
+ 			if (type == 0) {
+ 				this.vang += 800000;
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -1,574 +1,321 @@
+ package event_daily;
+ 
+-import java.io.IOException;
+-import java.net.Socket;
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.List;
+-import client.Clan;
+-import client.Pet;
++import client.Body;
++import client.Item;
+ import client.Player;
+ import core.Manager;
+ import core.Service;
+ import core.Util;
+ import io.Message;
+ import io.Session;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
+ import map.Map;
+ import map.MapService;
+ import map.Mob_in_map;
+-import map.Vgo;
+ import template.Item3;
+-
+-public class LoiDai {
+-
+-    private static List<LoiDai> list_loidai = new ArrayList<>();
+-    private static List<Player> list_loidai_name = new ArrayList<>();
+-    public static int time_state = 120;
+-    public static int state = 0;
+-    public Player p1;
+-    public Player p2;
+-    public int time;
+-    public int state_ld;
+-    public Map map;
+-    public byte result = 0;
+-    public byte round;
+-
+-    public LoiDai() {
+-        this.time = 60;
+-        this.state_ld = 0;
+-    }
+-
+-    public synchronized static boolean check_register(Player p) {
+-        for (int i = 0; i < LoiDai.list_loidai_name.size(); i++) {
+-            if (LoiDai.list_loidai_name.get(i).name.equals(p.name)) {
+-                return true;
+-            }
+-        }
+-        return false;
+-    }
+-
+-    public synchronized static void add_name_register(Player p) throws IOException {
+-        Player p0 = new Player(new Session(new Socket()), p.id);
+-        p0.setup();
+-        p0.set_in4();
+-        LoiDai.list_loidai_name.add(p0);
+-        
+-        	if (p.nv_tinh_tu[0] == 25 && p.nv_tinh_tu[1] < p.nv_tinh_tu[2]) {
+-			p.nv_tinh_tu[1]++;
+-		}
+-    }
+-
+-    public synchronized static void update_state() throws IOException {
+-        LoiDai.time_state--;
+-        if (LoiDai.time_state == -1) {
+-            LoiDai.state++;
+-            if (LoiDai.state == 3) {
+-                if (LoiDai.list_loidai.size() < 1 && LoiDai.list_loidai_name.size() > 1) {
+-                    LoiDai.state = 1;
+-                    // LoiDai.init_atk();
+-                } else {
+-                    LoiDai.state = 0;
+-                }
+-            }
+-            switch (LoiDai.state) {
+-                case 2: {
+-                }
+-                case 0: {
+-                    LoiDai.list_loidai_name.clear();
+-                    LoiDai.time_state = 60 * 5;
+-                    Manager.gI().chatKTGprocess("@Server : Lôi đài đã mở đăng ký mới, mọi người hãy vào đăng ký");
+-                    break;
+-                }
+-                case 1: {
+-                    LoiDai.time_state = -2;
+-                    new Thread(() -> {
+-                        LoiDai.init_atk();
+-                    }).start();
+-                    break;
+-                }
+-            }
+-        } else if (LoiDai.state == 1 && LoiDai.list_loidai.size() < 1 && LoiDai.list_loidai_name.size() > 1) {
+-            LoiDai.time_state = 60 * 5;
+-            LoiDai.state = 2;
+-        } else if (LoiDai.state == 1 && LoiDai.list_loidai.size() < 1 && LoiDai.list_loidai_name.size() <= 1) {
+-            // LoiDai.time_state = 0;
+-            LoiDai.time_state = 60 * 5;
+-            LoiDai.state = 2;
+-        }
+-    }
+-
+-    public synchronized void update_atk() throws IOException {
+-        this.time--;
+-        // System.out.println("state " + this.state_ld + " time " + this.time);
+-        if (this.time >= 5 && this.time % 5 == 0) {
+-            this.update_time_atk();
+-        }
+-        if (this.time <= -1 && this.round < 3) {
+-            if (this.time < 0) {
+-                this.time = 0;
+-            }
+-            this.state_ld++;
+-            if (this.state_ld == 2) {
+-                this.state_ld = 0;
+-                if (!this.p1.isdie && !this.p2.isdie) {
+-                    if (50 > Util.random(100) // && this.round == 2 && this.result == 1
+-                            ) {
+-                        MapService.die_by_player(map, map.ld.p1, map.ld.p2);
+-                        this.result--;
+-                    } else {
+-                        MapService.die_by_player(map, map.ld.p2, map.ld.p1);
+-                        this.result++;
+-                    }
+-                }
+-            }
+-            switch (this.state_ld) {
+-                case 0: {
+-                    // System.out.println("round " + this.round + " result " + this.result);
+-                    if (this.p1.id == this.p2.id) {
+-						if (this.p1.is_nhanban) {
+-							this.result = -2;
+-						} else {
+-							this.result = 2;
+-						}
+-						
+-					}
+-                    if (this.round >= 3 || this.result == 2 || this.result == -2) {
+-                        if (this.result > 0) {
+-                            this.update_point_player(this.p2, this.p1);
+-                            for (int i = 0; i < map.players.size(); i++) {
+-                                Player p00 = map.players.get(i);
+-                                Service.send_notice_nobox_white(p00.conn, map.ld.p1.name + " dành chiến thắng chung cuộc");
+-                            }
+-                            LoiDai.remove_list_name(map.ld.p2);
+-                        } else {
+-                            this.update_point_player(this.p1, this.p2);
+-                            for (int i = 0; i < map.players.size(); i++) {
+-                                Player p00 = map.players.get(i);
+-                                Service.send_notice_nobox_white(p00.conn, map.ld.p2.name + " dành chiến thắng chung cuộc");
+-                            }
+-                            LoiDai.remove_list_name(map.ld.p1);
+-                        }
+-                        if (LoiDai.list_loidai_name.size() == 1) {
+-                            LoiDai.list_loidai_name.get(0).point_active[2] += 50;
+-                        }
+-                        this.time = 5;
+-                        this.state_ld = 2;
+-                    } else {
+-                        this.time = 15;
+-                    }
+-                    break;
+-                }
+-                case 1: {
+-                    
+-                    if (this.round >= 3 || this.result == 2 || this.result == -2) {
+-                          if (this.result > 0) {
+-                            this.update_point_player(this.p2, this.p1);
+-                            for (int i = 0; i < map.players.size(); i++) {
+-                                Player p00 = map.players.get(i);
+-                                Service.send_notice_nobox_white(p00.conn, map.ld.p1.name + " dành chiến thắng chung cuộc");
+-                            }
+-                            LoiDai.remove_list_name(map.ld.p2);
+-                        } else {
+-                            this.update_point_player(this.p1, this.p2);
+-                            for (int i = 0; i < map.players.size(); i++) {
+-                                Player p00 = map.players.get(i);
+-                                Service.send_notice_nobox_white(p00.conn, map.ld.p2.name + " dành chiến thắng chung cuộc");
+-                            }
+-                            LoiDai.remove_list_name(map.ld.p1);
+-                        }
+-                        if (LoiDai.list_loidai_name.size() == 1) {
+-                            LoiDai.list_loidai_name.get(0).point_active[2] += 50;
+-                        }
+-                        this.time = 5;
+-                        this.state_ld = 2;
+-                    } else {
+-                    
+-                    round++;
+-                    if (this.p1.isdie) {
+-                        this.p1.isdie = false;
+-                        this.p1.hp = this.p1.body.get_max_hp();
+-                        this.p1.mp = this.p1.body.get_max_mp();
+-                        Service.send_char_main_in4(this.p1);
+-                        Service.send_combo(this.p1.conn);
+-                        Service.usepotion(this.p1, 0, this.p1.hp);
+-                        Service.usepotion(this.p1, 1, this.p1.mp);
+-                    }
+-                    if (this.p2.isdie) {
+-                        this.p2.isdie = false;
+-                        this.p2.hp = this.p2.body.get_max_hp();
+-                        this.p2.mp = this.p2.body.get_max_mp();
+-                        Service.send_char_main_in4(this.p2);
+-                        Service.send_combo(this.p2.conn);
+-                        Service.usepotion(this.p2, 0, this.p2.hp);
+-                        Service.usepotion(this.p2, 1, this.p2.mp);
+-                    }
+-                    this.time = 60 * 2;
+-                    }
+-                    break;
+-                }
+-                case 3: {
+-                   
+-                    while (this.map.players.size() > 0) {
+-                        if (this.map.players.get(0).conn.connected) {
+-                            Vgo vgo = new Vgo();
+-                            vgo.id_map_go = 1;
+-                            vgo.x_new = 432;
+-                            vgo.y_new = 354;
+-                            this.map.players.get(0).hp = this.map.players.get(0).body.get_max_hp();
+-                            this.map.players.get(0).isdie = false;
+-                            this.map.players.get(0).change_map(this.map.players.get(0), vgo);
+-                        } else {
+-                            this.map.players.remove(0);
+-                        }
+-                    }
+-                    LoiDai.remove_loidai(this);
+-                    break;
+-                }
+-            }
+-            this.update_time_atk();
+-        } else if (this.state_ld == 1 && (this.round >= 3 || this.round < 0)) {
+-            if (this.result > 0) {
+-                this.update_point_player(this.p2, this.p1);
+-                for (int i = 0; i < map.players.size(); i++) {
+-                    Player p00 = map.players.get(i);
+-                    Service.send_notice_nobox_white(p00.conn, map.ld.p1.name + " dành chiến thắng chung cuộc");
+-                }
+-                LoiDai.remove_list_name(map.ld.p2);
+-            } else {
+-                this.update_point_player(this.p1, this.p2);
+-                for (int i = 0; i < map.players.size(); i++) {
+-                    Player p00 = map.players.get(i);
+-                    Service.send_notice_nobox_white(p00.conn, map.ld.p2.name + " dành chiến thắng chung cuộc");
+-                }
+-                LoiDai.remove_list_name(map.ld.p1);
+-            }
+-            if (LoiDai.list_loidai_name.size() == 1) {
+-                LoiDai.list_loidai_name.get(0).point_active[2] += 50;
+-            }
+-            this.time = 5;
+-            this.state_ld = 2;
+-
+-        }
+-        //
+-        if (this.state_ld == 1) {
+-            update_nhanban_atk();
+-        }
+-    }
+-
+-    private void update_nhanban_atk() throws IOException {
+-        if (this.p1.is_nhanban && !this.p1.isdie) {
+-            Player p0 = this.p1;
+-            int dame = (p0.body.get_dame_physical() + p0.body.get_dame_prop(1) + p0.body.get_dame_prop(2)
+-                    + p0.body.get_dame_prop(3) + p0.body.get_dame_prop(4)) / 2;
+-            MapService.fire_player(map, this.p2, this.p1, (byte) 0, dame, 0);
+-        }
+-        if (this.p2.is_nhanban && !this.p2.isdie) {
+-            Player p0 = this.p2;
+-            int dame = (p0.body.get_dame_physical() + p0.body.get_dame_prop(1) + p0.body.get_dame_prop(2)
+-                    + p0.body.get_dame_prop(3) + p0.body.get_dame_prop(4)) / 2;
+-            MapService.fire_player(map, this.p1, this.p2, (byte) 0, dame, 0);
+-        }
+-
+-    }
+-
+-    private synchronized static void remove_list_name(Player p22) {
+-        for (int i = 0; i < LoiDai.list_loidai_name.size(); i++) {
+-            if (LoiDai.list_loidai_name.get(i).id == p22.id) {
+-                LoiDai.list_loidai_name.remove(i);
+-                break;
+-            }
+-        }
+-    }
+-
+-    private synchronized static void remove_loidai(LoiDai loiDai) {
+-        LoiDai.list_loidai.remove(loiDai);
+-         loiDai.map.stop_map();
+-    }
+-
+-    private synchronized static void init_atk() {
+-        try {
+-            if (LoiDai.list_loidai_name.size() > 0) {
+-                int size_register = (int) Math.pow(2, Util.log_2(LoiDai.list_loidai_name.size()));
+-                if (size_register < 2) {
+-                    LoiDai.refresh();
+-                    return;
+-                }
+-                int i = 0;
+-                while (LoiDai.list_loidai_name.size() < size_register) {
+-                    Player p0 = new Player(new Session(new Socket()), LoiDai.list_loidai_name.get(i).id);
+-                    p0.setup();
+-                    p0.set_in4();
+-                    p0.is_nhanban = true;
+-                    p0.name = "(nb)" + p0.name;
+-                    LoiDai.list_loidai_name.add(p0);
+-                    i++;
+-                }
+-                Collections.shuffle(LoiDai.list_loidai_name);
+-                i = 2;
+-                while (i < LoiDai.list_loidai_name.size()) {
+-                    Player p01 = LoiDai.list_loidai_name.get(i);
+-                    Player p02 = LoiDai.list_loidai_name.get(i + 1);
+-                    if (p01.id == p02.id) {
+-                        LoiDai.list_loidai_name.set(i, LoiDai.list_loidai_name.get(i - 1));
+-                        LoiDai.list_loidai_name.set((i - 1), p01);
+-                    }
+-                    i += 2;
+-                }
+-                i = 0;
+-                while (i < LoiDai.list_loidai_name.size()) {
+-                    LoiDai temp = new LoiDai();
+-                    temp.p1 = LoiDai.list_loidai_name.get(i);
+-                    temp.p1.x = 280; // 360
+-                    temp.p1.y = 228;
+-                    temp.p1.typepk = 0;
+-                    temp.p2 = LoiDai.list_loidai_name.get(i + 1);
+-                    temp.p2.x = 440;
+-                    temp.p2.y = 228;
+-                    temp.p2.typepk = 0;
+-                    i += 2;
+-                    Map map_temp = Map.get_map_by_id(102)[0];
+-                    temp.map = new Map(102, 0, map_temp.npc_name_data, map_temp.name, map_temp.typemap, map_temp.ismaplang,
+-                            map_temp.showhs, map_temp.maxplayer, map_temp.maxzone, map_temp.vgos);
+-                    temp.map.mobs = new Mob_in_map[0];
+-                    temp.map.start_map();
+-                    temp.map.ld = temp;
+-                    temp.p1.map = temp.map;
+-                    temp.p2.map = temp.map;
+-                    MapService.enter(temp.map, temp.p1);
+-                    MapService.enter(temp.map, temp.p2);
+-                    temp.round = 0;
+-                    LoiDai.list_loidai.add(temp);
+-                }
+-                Manager.gI().chatKTGprocess("@Server : Lôi đài đang được diễn ra, mọi người hãy vào xem");
+-            } else {
+-                LoiDai.refresh();
+-            }
+-        } catch (IOException e) {
+-            LoiDai.refresh();
+-        }
+-    }
+-
+-    private synchronized static void refresh() {
+-        time_state = 300;
+-        state = 0;
+-        for (int i = 0; i < LoiDai.list_loidai.size(); i++) {
+-            LoiDai.list_loidai.get(i).map.stop_map();
+-        }
+-        LoiDai.list_loidai.clear();
+-        LoiDai.list_loidai_name.clear();
+-    }
+-
+-    public synchronized static String get_list_register() {
+-        String s = "";
+-        for (int i = 0; i < LoiDai.list_loidai_name.size(); i++) {
+-            s += (i + 1) + ". " + LoiDai.list_loidai_name.get(i).name + "\n";
+-        }
+-        return s.isEmpty() ? "Trống" : s;
+-    }
+-
+-    public synchronized static String[] get_list_loidai_is_atk() {
+-        String[] list = new String[]{"Không có trận nào"};
+-        if (LoiDai.list_loidai.size() > 0) {
+-            list = new String[LoiDai.list_loidai.size()];
+-            for (int i = 0; i < list.length; i++) {
+-                list[i] = LoiDai.list_loidai.get(i).p1.name + " Lv " + LoiDai.list_loidai.get(i).p1.level + " vs "
+-                        + LoiDai.list_loidai.get(i).p2.name + " Lv " + LoiDai.list_loidai.get(i).p2.level;
+-            }
+-        }
+-        return list;
+-    }
+-
+-    public synchronized static Map get_map_view_loidai(byte index) {
+-        for (int i = 0; i < LoiDai.list_loidai.size(); i++) {
+-            if (i == index) {
+-                return LoiDai.list_loidai.get(i).map;
+-            }
+-        }
+-        return null;
+-    }
+-
+-    public synchronized static Map get_map_atk_loidai(Player p) {
+-        for (int i = 0; i < LoiDai.list_loidai.size(); i++) {
+-            if ((LoiDai.list_loidai.get(i).p1.name.equals(p.name) && !LoiDai.list_loidai.get(i).p1.is_nhanban)
+-                    || (LoiDai.list_loidai.get(i).p2.name.equals(p.name) && !LoiDai.list_loidai.get(i).p2.is_nhanban)) {
+-                return LoiDai.list_loidai.get(i).map;
+-            }
+-        }
+-        return null;
+-    }
+-
+-    public static int size_register() {
+-        return LoiDai.list_loidai_name.size();
+-    }
+-
+-    public static void send_in4(LoiDai ld, Player p, int id) throws IOException {
+-        Player p0 = null;
+-        if (ld.p1.id == id) {
+-            p0 = ld.p1;
++import template.Item47;
++import template.ItemSellCoin;
++import template.Option;
++
++public final class LoiDai {
++    private static final String[] NAMES = {"Thiên Vũ", "Hàn Phong", "Bạch Nguyệt", "Lạc Vũ", "Xích Long"};
++    private static final int[] SKILLS = {1, 2, 3, 4, 5, 6, 7, 8};
++    private static final short BADGE = 88;
++    private static final short GOLD_CHEST = 206;
++    private static final int ROUND_SECONDS = 90;
++
++    public final Player p1;
++    public final Player p2;
++    public final Map map;
++    private final Map returnMap;
++    private final short returnX;
++    private final short returnY;
++    private final long previousHp;
++    private final int previousMp;
++    private int time = 20;
++    public volatile int state_ld;
++    public int round = 1;
++    private int wins;
++    private int losses;
++    private volatile boolean ready;
++    private boolean finished;
++
++    private LoiDai(Player player, Player bot, Map arena) {
++        p1 = player;
++        p2 = bot;
++        map = arena;
++        returnMap = player.map;
++        returnX = player.x;
++        returnY = player.y;
++        previousHp = player.hp;
++        previousMp = player.mp;
++    }
++
++    public static void start(Player player) throws IOException {
++        if (player.map.ld != null || player.isdie) {
++            Service.send_notice_box(player.conn, "Bạn cần rời trận hiện tại hoặc hồi sinh trước khi vào Lôi đài.");
++            return;
++        }
++        if (player.level < 50) {
++            Service.send_notice_box(player.conn, "Lôi đài offline mở từ cấp 50.");
++            return;
++        }
++        Map[] templates = Map.get_map_by_id(102);
++        if (templates == null || templates.length == 0) {
++            Service.send_notice_box(player.conn, "Chưa tải được bản đồ Lôi đài.");
++            return;
++        }
++        Map template = templates[0];
++        Map arena = new Map(102, 0, template.npc_name_data, template.name, template.typemap,
++                false, template.showhs, template.maxplayer, template.maxzone, List.of());
++        Player bot = createOpponent(player);
++        LoiDai match = new LoiDai(player, bot, arena);
++        arena.mobs = new Mob_in_map[0];
++        arena.ld = match;
++        bot.map = arena;
++        arena.players.add(bot);
++        MapService.leave(player.map, player);
++        player.map = arena;
++        player.x = 288;
++        player.y = 228;
++        player.typepk = 0;
++        player.is_changemap = false;
++        player.hp = player.body.get_max_hp();
++        player.mp = player.body.get_max_mp();
++        MapService.enter(arena, player);
++        arena.start_map();
++    }
++
++    private static Player createOpponent(Player player) throws IOException {
++        Session session = new Session(null) {
++            @Override public void addmsg(Message message) {}
++        };
++        Player bot = new Player(session, Short.toUnsignedInt((short) Manager.gI().get_index_mob_new()));
++        session.p = bot;
++        bot.name = NAMES[Util.random(NAMES.length)] + " [Bot]";
++        bot.level = (short) (player.level / 10 * 10 + Util.random(10));
++        bot.clazz = (byte) Util.random(4);
++        bot.hair = (byte) Util.random(8);
++        bot.eye = (byte) Util.random(8);
++        bot.item = new Item(bot);
++        bot.item.wear = new Item3[24];
++        bot.body = new Body(bot);
++        bot.list_eff = new ArrayList<>();
++        bot.list_enemies = new ArrayList<>();
++        bot.mypet = new ArrayList<>();
++        bot.kinhmach = new int[]{1, 0};
++        bot.tutien = new int[2];
++        bot.skill_point = new byte[21];
++        bot.time_delay_skill = new long[21];
++        bot.fashion = new byte[5];
++        java.util.Arrays.fill(bot.fashion, (byte) -1);
++        bot.x = 408;
++        bot.y = 228;
++        bot.typepk = 0;
++        bot.type_use_mount = -1;
++        bot.id_horse = -1;
++        bot.id_name = -1;
++        bot.my_store_name = "";
++        bot.is_nhanban = true;
++        bot.point1 = bot.point2 = bot.point3 = bot.point4 = bot.level;
++        bot.load_skill();
++        for (int skill : SKILLS) {
++            if (skill < bot.skills.length && bot.skills[skill].mLvSkill.length > 0
++                    && bot.skills[skill].mLvSkill[0].LvRe <= bot.level + 1) bot.skill_point[skill] = 1;
++        }
++        int clazz = bot.clazz;
++        int[] weapons = {4672, 4673, 4675, 4674};
++        equip(bot, 0, weapons[clazz]);
++        equip(bot, 1, 4656 + clazz);
++        equip(bot, 6, 4664 + clazz);
++        equip(bot, 7, 4660 + clazz);
++        equip(bot, 2, 4668);
++        equip(bot, 4, 4670);
++        equip(bot, 8, 4671);
++        equip(bot, 3, 4669);
++        equip(bot, 9, 4669);
++        bot.hp = bot.body.get_max_hp();
++        bot.mp = bot.body.get_max_mp();
++        return bot;
++    }
++
++    private static void equip(Player bot, int slot, int id) {
++        Item3 item = ItemSellCoin.entry.stream().filter(offer -> offer.id == id).findFirst().orElseThrow().createItem();
++        item.tier = (byte) Util.random(7, 12);
++        if (slot == 0 && item.op.stream().noneMatch(option -> option.id == 37))
++            item.op.add(new Option(37, 2));
++        item.level = (short) (45 + (bot.level - 45) / 10 * 10);
++        bot.item.wear[slot] = item;
++    }
++
++    public synchronized void ready() {
++        if (!ready) {
++            time = 3;
++            ready = true;
++        }
++    }
++
++    public void update_atk() throws IOException {
++        if (!p1.conn.connected || p1.map != map) {
++            map.stop_map();
++            return;
++        }
++        if (finished) {
++            if (--time <= 0) leave(p1);
++            return;
++        }
++        if (!ready) {
++            if (--time <= 0) leave(p1);
++            return;
++        }
++        if (state_ld == 0) {
++            if (--time <= 0) {
++                state_ld = 1;
++                time = ROUND_SECONDS;
++            }
++        } else if (p1.isdie || p2.isdie || --time <= 0) {
++            if (p2.isdie && !p1.isdie) wins++;
++            if (p1.isdie && !p2.isdie) losses++;
++            if (wins == 2 || losses == 2 || round == 3) finish();
++            else {
++                round++;
++                resetFighters();
++                time = 3;
++                state_ld = 0;
++            }
+         } else {
+-            p0 = ld.p2;
+-        }
+-        if (p0 != null) {
+-            int dem = 0;
+-            for (int i = 0; i < 11; i++) {
+-                if (i != 0 && i != 1 && i != 6 && i != 7 && i != 10) {
+-                    continue;
+-                }
+-                if (p0.item.wear[i] != null) {
+-                    dem++;
+-                }
+-            }
+-            Message m = new Message(5);
+-            m.writer().writeShort(p0.id);
+-            m.writer().writeUTF(p0.name);
+-            m.writer().writeShort(p0.x);
+-            m.writer().writeShort(p0.y);
+-            m.writer().writeByte(p0.clazz);
+-            m.writer().writeByte(-1);
+-            m.writer().writeByte(p0.head);
+-            m.writer().writeByte(p0.eye);
+-            m.writer().writeByte(p0.hair);
+-            m.writer().writeShort(p0.level);
+-//            m.writer().writeInt(p0.hp);
+-//            m.writer().writeInt(p0.body.get_max_hp());
+-
+-        m.writer().writeInt ((int) Math.min(p.hp, Integer.MAX_VALUE));
+-        m.writer().writeInt((int) Math.min(p.body.get_max_hp(), Integer.MAX_VALUE));
+-            m.writer().writeByte(p0.typepk);
+-            m.writer().writeShort(p0.pointpk);
+-            m.writer().writeByte(dem);
+-            //
+-            for (int i = 0; i < p0.item.wear.length; i++) {
+-                if (i != 0 && i != 1 && i != 6 && i != 7 && i != 10) {
+-                    continue;
+-                }
+-                Item3 temp = p0.item.wear[i];
+-                if (temp != null) {
+-                    m.writer().writeByte(temp.type);
+-                    if (i == 10 && p0.item.wear[14] != null
+-                            && (p0.item.wear[14].id >= 4638 && p0.item.wear[14].id <= 4648)) {
+-                        m.writer().writeByte(p0.item.wear[14].part);
+-                    } else {
+-                        m.writer().writeByte(Service.get_weapon_part(temp));
+-                    }
+-                    m.writer().writeByte(3);
+-                    m.writer().writeShort(-1);
+-                    m.writer().writeShort(-1);
+-                    m.writer().writeShort(-1);
+-                    m.writer().writeShort(-1); // eff
+-                }
+-            }
+-            //
+-            if (p0.myclan != null) {
+-                m.writer().writeShort(p0.myclan.icon);
+-                m.writer().writeInt(Clan.get_id_clan(p0.myclan));
+-                m.writer().writeUTF(p0.myclan.name_clan_shorted);
+-                m.writer().writeByte(p0.myclan.get_mem_type(p0.name));
+-            } else {
+-                m.writer().writeShort(-1); // clan
+-            }
+-            if (p0.pet_follow) {
+-                for (Pet temp : p0.mypet) {
+-                    if (temp.is_follow) {
+-                        m.writer().writeByte(temp.type); // type
+-                        m.writer().writeByte(temp.icon); // icon
+-                        m.writer().writeByte(temp.nframe); // nframe
+-                        break;
+-                    }
+-                }
+-            } else {
+-                m.writer().writeByte(-1); // pet
+-            }
+-            m.writer().writeByte(p0.fashion.length);
+-            for (int i = 0; i < p0.fashion.length; i++) {
+-                m.writer().writeShort(Service.get_fashion_part(p0.fashion[i]));
+-            }
+-            //
+-            m.writer().writeShort(-1);
+-            m.writer().writeByte(p0.type_use_mount);
+-            m.writer().writeBoolean(false);
+-            m.writer().writeByte(1);
+-            m.writer().writeByte(0);
+-            m.writer().writeShort(Service.get_id_mat_na(p0)); // mat na
+-            m.writer().writeByte(1); // paint mat na trc sau
+-            m.writer().writeShort(Service.get_id_phiphong(p0)); // phi phong
+-            m.writer().writeShort(Service.get_id_weapon(p0)); // weapon
+-            m.writer().writeShort(p0.id_horse);
+-            m.writer().writeShort(Service.get_id_hair(p0)); // hair
+-            m.writer().writeShort(Service.get_id_wing(p0)); // wing
+-            m.writer().writeShort(p0.id_name); // body
+-            m.writer().writeShort(-1); // leg
+-            m.writer().writeShort(-1); // bienhinh
+-            p.conn.addmsg(m);
+-            m.cleanup();
+-        }
+-    }
+-
+-    public static void update_atk_when_someone_die(LoiDai ld) throws IOException {
+-        synchronized (ld.map) {
+-            if (ld.p1.isdie) {
+-                ld.result--;
+-            } else {
+-                ld.result++;
+-            }
+-            ld.time = 1;
+-//            ld.update_atk();
+-        }
+-    }
+-
+-    private void update_point_player(Player p_lose, Player p_win) {
+-        int point_delta = p_lose.point_active[2] - p_win.point_active[2];
+-        if (point_delta == 0) {
+-            point_delta = 30;
+-        } else if (point_delta < 0) {
+-            point_delta = Math.abs(point_delta);
+-            point_delta = 30 - ((point_delta > 15) ? 15 : point_delta);
+-        } else {
+-            point_delta = 30 + ((point_delta > 15) ? 15 : point_delta);
+-        }
+-        update_point_player_2(p_lose, -point_delta);
+-        update_point_player_2(p_win, point_delta);
+-    }
+-
+-    private void update_point_player_2(Player p, int par) {
+-        Player p0 = Map.get_player_by_id(p.id);
+-        if (p0 != null) {
+-            p0.point_active[2] += par;
+-        } else {
+-            p.point_active[2] += par;
+-        }
++            attackWithSkill();
++        }
++        if (time % 5 == 0 || state_ld != 1) update_time_atk();
++    }
++
++    private void attackWithSkill() throws IOException {
++        int start = Util.random(SKILLS.length);
++        for (int i = 0; i < SKILLS.length; i++) {
++            int skill = SKILLS[(start + i) % SKILLS.length];
++            if (p2.skill_point[skill] == 0 || p2.time_delay_skill[skill] > System.currentTimeMillis()) continue;
++            p2.mp = p2.body.get_max_mp();
++            Message attack = new Message(6);
++            attack.writer().writeByte(skill);
++            attack.writer().writeByte(1);
++            attack.writer().writeShort(p1.id);
++            MapService.use_skill(map, p2.conn, new Message((byte) 6, attack.getData()), 1);
++            return;
++        }
++    }
++
++    private void resetFighters() throws IOException {
++        for (Player fighter : new Player[]{p1, p2}) {
++            fighter.isdie = false;
++            fighter.hp = fighter.body.get_max_hp();
++            fighter.mp = fighter.body.get_max_mp();
++        }
++        Service.send_char_main_in4(p1);
++        MapService.send_in4_other_char(map, p1, p2);
++    }
++
++    private synchronized void finish() throws IOException {
++        if (finished || p1.map != map) return;
++        int delta = wins > losses ? 30 : losses > wins && p1.point_active[2] >= 1260 ? -30 : 0;
++        p1.point_active[2] += delta;
++        finished = true;
++        state_ld = 2;
++        time = 5;
++        Service.send_notice_box(p1.conn, (wins > losses ? "Bạn thắng." : wins == losses ? "Trận hòa." : "Bạn thua.")
++                + " Tỷ số " + wins + "-" + losses + ". Điểm Lôi đài: " + p1.point_active[2] + ".");
++    }
++
++    public synchronized void leave(Player player) throws IOException {
++        if (player != p1 || player.map != map) return;
++        map.stop_map();
++        MapService.leave(map, player);
++        player.map = returnMap;
++        player.x = returnX;
++        player.y = returnY;
++        player.isdie = false;
++        player.hp = Math.max(1, Math.min(previousHp, player.body.get_max_hp()));
++        player.mp = Math.min(previousMp, player.body.get_max_mp());
++        player.typepk = -1;
++        player.is_changemap = false;
++        if (player.conn.connected) MapService.enter(returnMap, player);
++        player.flush();
+     }
+ 
+     public void update_time_atk() throws IOException {
+-        Message m = new Message(-104);
+-        m.writer().writeByte(1);
+-        m.writer().writeByte(1);
+-        m.writer().writeShort(this.time);
+-        m.writer().writeUTF(((this.state_ld == 1) ? ("Lôi Đài : Hiệp " + this.round) : ("Lôi Đài : Nghỉ ")));
+-        for (int i = 0; i < this.map.players.size(); i++) {
+-            this.map.players.get(i).conn.addmsg(m);
+-        }
+-        m.cleanup();
+-    }
+-
+-    public static void close() {
+-        for (int i = 0; i < LoiDai.list_loidai.size(); i++) {
+-            LoiDai.list_loidai.get(i).map.stop_map();
+-        }
+-    }
+-
+-    public synchronized static String get_notice_break_time() {
+-        String s = "thời gian nghỉ ngơi\nHãy quay lại sau " + (LoiDai.time_state) + "s nữa";
+-        if (LoiDai.list_loidai.size() < 1 && LoiDai.list_loidai_name.size() > 1) {
+-            s = "thời gian nghỉ ngơi\nTrận đấu tiếp theo bắt đầu sau " + (LoiDai.time_state)
+-                    + "s nữa\nDanh sách tham gia :\n";
+-            for (int i = 0; i < LoiDai.list_loidai_name.size(); i++) {
+-                s += (i + 1) + ". " + LoiDai.list_loidai_name.get(i).name + "\n";
+-            }
+-        } else if (LoiDai.list_loidai_name.size() == 1) {
+-            s = "thời gian nghỉ ngơi\nMở đăng ký tiếp theo bắt đầu sau " + (LoiDai.time_state)
+-                    + "s nữa\nNgười vừa chiến thắng :\n" + LoiDai.list_loidai_name.get(0).name;
+-        }
+-        return s;
++        Message message = new Message(-104);
++        message.writer().writeByte(1);
++        message.writer().writeByte(1);
++        message.writer().writeShort(Math.max(0, time));
++        message.writer().writeUTF(finished ? "Kết thúc Lôi đài" : "Lôi đài · Hiệp " + round);
++        p1.conn.addmsg(message);
++    }
++
++    public static void claimRankReward(Player player) throws IOException {
++        synchronized (player) {
++            int points = player.point_active[2];
++            if (points <= 0) {
++                Service.send_notice_box(player.conn, "Hãy thắng ít nhất một trận để có điểm đổi quà.");
++                return;
++            }
++            int bracket = points >= 2520 ? 4 : points >= 1680 ? 3 : points >= 1260 ? 2 : points >= 840 ? 1 : 0;
++            int[] multipliers = {500, 800, 1000, 4000, 5000};
++            int[] caps = {1, 2, 3, 5, 10};
++            String[] titles = {"Lính canh", "Hiệp sĩ tập sự", "Hiệp sĩ nhỏ", "Hiệp sĩ", "Đại Hiệp sĩ"};
++            int chests = Math.min(caps[bracket], Math.max(1, points / 200));
++            int titleId = bracket >= 2 ? 3594 + bracket : -1;
++            int slots = titleId != -1 ? 1 : 0;
++            int existing = player.item.total_item_by_id(4, GOLD_CHEST);
++            if (existing == 0) slots++;
++            if (player.item.get_bag_able() < slots || existing + chests > 32000) {
++                Service.send_notice_box(player.conn, "Hành trang chưa đủ chỗ để đổi quà.");
++                return;
++            }
++            if (titleId != -1) {
++                Item3 title = ItemSellCoin.entry.stream().filter(offer -> offer.id == titleId)
++                        .findFirst().orElseThrow().createItem();
++                player.item.add_item_bag3(title);
++                player.item.char_inventory(3);
++            }
++            long gold = (long) points * multipliers[bracket];
++            player.update_vang(gold);
++            addReward(player, GOLD_CHEST, chests);
++            player.point_active[2] = 0;
++            player.flush();
++            player.item.char_inventory(4);
++            player.item.char_inventory(5);
++            Service.send_notice_box(player.conn, "Mốc " + titles[bracket] + " nhận " + gold + " vàng và "
++                    + chests + " Rương vàng." + (titleId == -1 ? "" : " Trang phục danh hiệu đã vào hành trang."));
++        }
++    }
++
++    public static void claimTestReward(Player player) throws IOException {
++        synchronized (player) {
++            if (player.point_active[3] != 0) {
++                Service.send_notice_box(player.conn, "Bạn đã nhận quà thử Lôi đài.");
++                return;
++            }
++            int badgeCount = player.item.total_item_by_id(4, BADGE);
++            int chestCount = player.item.total_item_by_id(4, GOLD_CHEST);
++            int slots = (badgeCount == 0 ? 1 : 0) + (chestCount == 0 ? 1 : 0);
++            if (player.item.get_bag_able() < slots || badgeCount >= 32000 || chestCount >= 32000) {
++                Service.send_notice_box(player.conn, "Hành trang chưa đủ chỗ để nhận quà thử.");
++                return;
++            }
++            addReward(player, BADGE, 1);
++            addReward(player, GOLD_CHEST, 1);
++            player.point_active[3] = 1;
++            player.flush();
++            player.item.char_inventory(4);
++            Service.send_notice_box(player.conn, "Quà thử đã vào hành trang: 1 Huy hiệu và 1 Rương vàng.");
++        }
++    }
++
++    private static void addReward(Player player, short id, int quantity) {
++        Item47 reward = new Item47();
++        reward.id = id;
++        reward.quantity = (short) quantity;
++        player.item.add_item_bag47(4, reward);
+     }
+ }
+--- a/src/main/java/io/Session.java
++++ b/src/main/java/io/Session.java
+@@ -142,8 +142,15 @@
+             } catch (IOException e) {
+                 e.printStackTrace();
+             }
+-            p.flush();
+-            if (p.map.ld == null || (p.map.ld != null && p.map.ld.p1.id != p.id && p.map.ld.p2.id != p.id)) {
++            if (p.map.ld != null && p.map.ld.p1 == p) {
++                this.connected = false;
++                try {
++                    p.map.ld.leave(p);
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            } else {
++                p.flush();
+                 MapService.leave(p.map, p);
+             }
+             //
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -118,7 +118,7 @@
+ 				if (this.map_id == 48 && d != null) {
+ 					d.update();
+ 				}
+-				if (this.ld != null && LoiDai.state == 1) {
++				if (this.ld != null) {
+ 					this.ld.update_atk();
+ 				}
+ 				time2 = System.currentTimeMillis();
+@@ -400,6 +400,7 @@
+                         }
+                     }
+                 }
++                if (this.ld != null && p.is_nhanban) continue;
+                 p.update_wings_time();
+                 for (Pet pet : p.mypet) {
+                     if (pet.grown > 0 && pet.time_eat < System.currentTimeMillis()) {
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -15,7 +15,6 @@
+ import core.Util;
+ import event.BossEvent;
+ import event_daily.ChienTruong;
+-import event_daily.LoiDai;
+ import io.Message;
+ import io.Session;
+ import template.EffTemplate;
+@@ -2721,7 +2720,7 @@
+                 if (Map.is_map_chien_truong(map.map_id)) {
+                     p.update_point_arena(1);
+                 }
+-                if (p0.typepk == -1) {
++                if (map.ld == null && p0.typepk == -1) {
+                     if (!p0.list_enemies.contains(p.name) && !Manager.gI().bossTG.p.equals(p)) {
+                         p0.list_enemies.add(p.name);
+                         if (p0.list_enemies.size() > 20) {
+@@ -2736,9 +2735,7 @@
+                 //chet khi bat do sat
+ 
+                 MapService.die_by_player(map, p0, p);
+-                if (map.ld != null && map.ld.state_ld == 1) {
+-                    LoiDai.update_atk_when_someone_die(map.ld);
+-                } else if (map.ld == null) {
++                if (map.ld == null) {
+                     if (p.typepk == 0) {
+                         p.update_vang(-500 * p.level);
+                         p.update_Exp(-500 * p.level, true);
+--- a/src/main/java/template/Item3.java
++++ b/src/main/java/template/Item3.java
+@@ -69,6 +69,18 @@
+ 		return false;
+ 	}
+ 
++    public int optionValue(Option option) {
++        // Achievement cloak bonuses are fixed. Tinh Tú weapons can start with two skill levels.
++        int optionId = Byte.toUnsignedInt(option.id);
++        if ((id >= 4746 && id <= 4748) || (ItemSellCoin.isTinhTu(id) && optionId == 37))
++            return option.getParam(0);
++        return option.getParam(tier);
++    }
++
++    public void restoreAchievementCloakOptions() {
++        if (id >= 4746 && id <= 4748) op = ItemSellCoin.cosmeticOptions(ItemTemplate3.item.get(id));
++    }
++
+ 	public int getParamByOptionId(int optionId) {
+ 		if (this.op == null) {
+ 			return 0;
+@@ -76,7 +88,7 @@
+ 		int total = 0;
+ 		for (Option o : this.op) {
+ 			if (o != null && (o.id == optionId || Byte.toUnsignedInt(o.id) == optionId)) {
+-				total += o.getParam(this.tier);
++				total += optionValue(o);
+ 			}
+ 		}
+ 		return total;
+@@ -89,15 +101,17 @@
+ 		}
+ 		int count = 0;
+ 		for (Option o : this.op) {
+-			if (o != null && ((type == 15 || (type >= 21 && type <= 27)) || !isHiddenElementalOption(o.id, playerClazz))) {
++			if (o != null && (type == 15 || (type >= 21 && type <= 27) || ItemSellCoin.isTinhTu(id)
++					|| !isHiddenElementalOption(o.id, playerClazz))) {
+ 				count++;
+ 			}
+ 		}
+ 		m.writer().writeByte(count);
+ 		for (Option o : this.op) {
+-			if (o != null && ((type == 15 || (type >= 21 && type <= 27)) || !isHiddenElementalOption(o.id, playerClazz))) {
++			if (o != null && (type == 15 || (type >= 21 && type <= 27) || ItemSellCoin.isTinhTu(id)
++					|| !isHiddenElementalOption(o.id, playerClazz))) {
+ 				m.writer().writeByte(o.id);
+-				m.writer().writeInt(o.getParam(this.tier));
++				m.writer().writeInt(optionValue(o));
+ 			}
+ 		}
+ 	}
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -19,40 +19,40 @@
+                         + "[4589,[[4,200],[96,10]],4,180000],"
+                         + "[4588,[[1,200],[96,10]],4,180000]]";
+ 		String tt =
+-		      "[[4656,[[14,1000],[18,1000],[23,50],[27,1000],[15,1000],[36,1000],[33,1000]],4,250000],"
+-                        + "[4660,[[14,1000],[17,1000],[15,1000],[25,50],[27,1000],[33,1000],[36,1000]],4,250000],"
+-                        + "[4664,[[14,1000],[9,3500],[23,50],[25,50],[29,1000],[36,200],[27,1000],[15,1000]],4,250000],"
+-                        + "[4668,[[14,1000],[20,1000],[24,50],[9,3500],[27,1000],[15,1000]],4,250000],"
+-                        + "[4669,[[14,1000],[9,3500],[23,50],[25,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4783,[[14,1000],[8,3500],[25,50],[26,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4784,[[14,1000],[10,3500],[25,50],[26,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4785,[[14,1000],[11,3500],[23,50],[25,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4670,[[23,50],[24,50],[25,50],[26,50],[15,1000],[27,1000],[33,1000]],4,250000],"
++		      "[[4656,[],4,250000],"
++                        + "[4660,[],4,250000],"
++                        + "[4664,[],4,250000],"
++                        + "[4668,[],4,250000],"
++                        + "[4669,[],4,250000],"
++                        + "[4783,[],4,250000],"
++                        + "[4784,[],4,250000],"
++                        + "[4785,[],4,250000],"
++                        + "[4670,[],4,250000],"
+                        
+-                        + "[4671,[[14,1000],[9,3500],[34,1000],[19,1000],[15,1000],[27,1000],[33,1000]],4,250000],"
+-                        + "[4672,[[0,300],[2,300],[9,3500],[99,1000],[37,3],[40,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4658,[[14,1000],[18,1000],[26,50],[27,1000],[15,1000],[36,1000],[33,1000]],4,250000],"
+-                        + "[4662,[[14,1000],[17,1000],[15,1000],[25,50],[27,1000],[33,1000],[36,1000]],4,250000],"
+-                        + "[4666,[[14,1000],[8,3500],[26,50],[25,50],[29,1000],[36,200],[27,1000],[15,1000]],4,250000],"
+-                        + "[4780,[[14,1000],[20,1000],[24,50],[8,3500],[27,1000],[36,1000],[15,1000]],4,250000],"
++                        + "[4671,[],4,250000],"
++                        + "[4672,[],4,250000],"
++                        + "[4658,[],4,250000],"
++                        + "[4662,[],4,250000],"
++                        + "[4666,[],4,250000],"
++                        + "[4780,[],4,250000],"
+                         
+                         
+-                        + "[4786,[[14,1000],[8,3500],[26,50],[25,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4675,[[0,300],[1,300],[8,3500],[99,1000],[37,3],[40,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4657,[[14,1000],[18,1000],[23,50],[27,1000],[15,1000],[36,1000],[33,1000]],4,250000],"
+-                        + "[4661,[[14,1000],[17,1000],[15,1000],[25,50],[27,1000],[33,1000],[36,1000]],4,250000],"
+-                        + "[4665,[[14,1000],[11,3500],[23,50],[23,50],[29,1000],[36,200],[27,1000],[15,1000]],4,250000],"
+-                        + "[4781,[[14,1000],[20,1000],[24,50],[11,3500],[27,1000],[33,1000],[15,1000]],4,250000],"
++                        + "[4786,[],4,250000],"
++                        + "[4675,[],4,250000],"
++                        + "[4657,[],4,250000],"
++                        + "[4661,[],4,250000],"
++                        + "[4665,[],4,250000],"
++                        + "[4781,[],4,250000],"
+                        
+-                        + "[4787,[[14,1000],[11,3500],[23,50],[25,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4673,[[0,300],[4,300],[11,3500],[99,1000],[37,3],[40,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4659,[[14,1000],[18,1000],[26,50],[27,1000],[15,1000],[36,1000],[33,1000]],4,250000],"
+-                        + "[4663,[[14,1000],[17,1000],[15,1000],[25,50],[27,1000],[33,1000],[36,1000]],4,250000],"
+-                        + "[4667,[[14,1000],[10,3500],[26,50],[23,50],[29,1000],[36,200],[27,1000],[15,1000]],4,250000],"
+-                        + "[4782,[[14,1000],[20,1000],[24,50],[10,3500],[27,1000],[36,1000],[15,1000]],4,250000],"
++                        + "[4787,[],4,250000],"
++                        + "[4673,[],4,250000],"
++                        + "[4659,[],4,250000],"
++                        + "[4663,[],4,250000],"
++                        + "[4667,[],4,250000],"
++                        + "[4782,[],4,250000],"
+                       
+-                        + "[4788,[[14,1000],[10,3500],[26,50],[25,50],[29,1000],[27,1000],[15,1000]],4,250000],"
+-                        + "[4674,[[0,300],[3,300],[10,3500],[99,1000],[37,3],[40,1000],[27,1000],[15,1000]],4,250000],"
++                        + "[4788,[],4,250000],"
++                        + "[4674,[],4,250000],"
+                         + "[4719,[[7,1500],[8,3500],[9,3500],[10,3500],[11,3500],[27,500],[28,500],[36,1000],[15,1000]],5,250000],"
+                         + "[4731,[[7,2500],[8,3500],[9,3500],[10,3500],[11,3500],[33,1000],[27,1000],[15,1000]],5,250000],"
+                         + "[4718,[[15,500],[27,500],[23,50],[24,50],[25,50],[26,50],[62,1000],[66,500],[36,1000],[15,1000]],4,400000],"
+@@ -170,8 +170,13 @@
+         item.color = color;
+         item.part = template.getPart();
+         item.islock = true;
+-        item.op = new ArrayList<>();
+-        for (Option option : op) item.op.add(new Option(option.id, option.getParam(0)));
++        if (isTinhTu(id)) {
++            item.op = TinhTu.baseOptions(template, color);
++            TinhTu.addShopMetadata(item);
++        } else {
++            item.op = new ArrayList<>();
++            for (Option option : op) item.op.add(new Option(option.id, option.getParam(0)));
++        }
+         return item;
+     }
+ 
+@@ -196,10 +201,6 @@
+                 offers.put(bookId, book);
+             }
+         }
+-        int[][] hidden = {{4664,154,299,143,299},{4656,147,299,145,299},
+-            {4660,148,299,146,299},{4671,152,299,153,60000},
+-            {4668,167,299,165,60000},{4669,170,299,152,299},
+-            {4672,155,299,143,299},{4670,169,60000,151,299}};
+         for (ItemSellCoin offer : offers.values()) {
+             ItemTemplate3 template = ItemTemplate3.item.get(offer.id);
+             java.util.Map<Integer, Integer> options = new java.util.LinkedHashMap<>();
+@@ -209,25 +210,7 @@
+                     options.put(Byte.toUnsignedInt(option.id), option.getParam(0));
+             } else {
+                 for (Option option : offer.op) options.merge(Byte.toUnsignedInt(option.id), option.getParam(0), Math::max);
+-                if ((offer.id >= 4656 && offer.id <= 4675) || (offer.id >= 4780 && offer.id <= 4788)) {
+-                    offer.color = 4;
+-                    int element = template.getClazz() == 0 ? 9 : template.getClazz() == 1 ? 11 : template.getClazz() == 2 ? 8 : 10;
+-                    if (template.getType() == 2) {
+-                        for (int id = 7; id <= 13; id++) options.remove(id);
+-                        options.put(element,3500);
+-                    }
+-                    options.put(129,10000);
+-                    int base = offer.id;
+-                    if (offer.id >= 4656 && offer.id <= 4667) base = 4656 + (offer.id - 4656) / 4 * 4;
+-                    if (offer.id >= 4672 && offer.id <= 4675) base = 4672;
+-                    if (offer.id >= 4780 && offer.id <= 4782) base = 4668;
+-                    if (offer.id >= 4783 && offer.id <= 4785) base = 4669;
+-                    if (offer.id >= 4786 && offer.id <= 4788) base = 4671;
+-                    for (int[] row : hidden) if (row[0] == base) {
+-                        options.put(row[1],row[2]);
+-                        options.put(row[3],row[4]);
+-                    }
+-                }
++                if (isTinhTu(offer.id)) offer.color = (byte) (offer.id == 4784 ? 5 : 4);
+                 if (template.getType() == 16) offer.color = 4;
+                 if (template.getType() == 14) offer.color = 0;
+                 if (offer.id == 2940) offer.color = 5;
+@@ -248,6 +231,7 @@
+         }
+         java.util.Set<Short> materials = new java.util.LinkedHashSet<>();
+         for (short id : materialIds) materials.add(id);
++        for (short id : new short[]{0, 1, 2, 3}) materials.add(id);
+         // Native medal materials: level 1 occupies IDs 46 through 145.
+         for (short id = 46; id <= 145; id++) materials.add(id);
+         for (short id : LEVEL5_GEMS) {
+@@ -300,6 +284,12 @@
+                 data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[69,5000],[108,1]]"; break;
+             case 4744: case 4745:
+                 data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[180,1000]]"; break;
++            case 4746:
++                data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[27,1500],[28,1500]]"; break;
++            case 4747:
++                data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[27,1000],[28,1000]]"; break;
++            case 4748:
++                data = "[[7,500],[8,500],[9,500],[10,500],[11,500],[27,500],[28,500]]"; break;
+             case 4749: case 4751:
+                 data = "[[7,1500],[8,1500],[9,1500],[10,1500],[11,1500],[62,10000],[69,5000]]"; break;
+             case 4750: case 4752:
+--- a/src/main/java/template/TinhTu.java
++++ b/src/main/java/template/TinhTu.java
+@@ -1,6 +1,8 @@
+ package template;
+ 
+ import core.Util;
++import java.util.ArrayList;
++import java.util.List;
+ 
+ public final class TinhTu {
+     private static final int[][] SET_SLOTS = {{1, 6, 7}, {0, 3, 9}, {2, 4, 8}};
+@@ -57,6 +59,54 @@
+         return chance > 0 && (chance >= 10000 || Util.random(10000) < chance);
+     }
+ 
++    // Observed level-45 tooltips, in order. Values are examples from the recordings.
++    // https://www.youtube.com/watch?v=x1MXpFen3Pc (3:20, 3:54, 4:29, 5:43, 6:34, 7:44, 8:30)
++    // https://www.youtube.com/watch?v=z3z1tuLECzw (1:30, 10:07, 10:10, 11:07)
++    // https://www.youtube.com/watch?v=dvtAyHGStbk (5:51)
++    public static List<Option> baseOptions(ItemTemplate3 template, int color) {
++        int[] sample = switch (template.getId()) {
++            case 4656 -> color == 4 ? new int[]{14,214,15,1071,16,804,25,16} : null;
++            case 4659 -> color == 4 ? new int[]{14,198,15,1071,16,893,24,14} : null;
++            case 4660 -> color == 3 ? new int[]{14,145,16,625,25,24} : null;
++            case 4667 -> color == 2 ? new int[]{7,3076,14,145,27,1593} : null;
++            case 4668 -> color == 4 ? new int[]{9,2697,14,138,32,447,33,329} : null;
++            case 4669 -> color == 2 ? new int[]{9,2697,23,17}
++                    : color == 3 ? new int[]{23,22,25,22} : null;
++            case 4784 -> color == 5 ? new int[]{10,2697,26,17,36,399} : null;
++            case 4670 -> color == 1 ? new int[]{23,16,24,13,25,16,26,16}
++                    : color == 4 ? new int[]{24,21,34,316} : null;
++            case 4671 -> color == 1 ? new int[]{14,138,23,24} : null;
++            case 4673 -> color == 4 ? new int[]{0,330,33,469,37,2,40,597} : null;
++            case 4674 -> color == 4 ? new int[]{0,319,34,368,37,2,40,597} : null;
++            case 4675 -> color == 4 ? new int[]{1,330,35,336,37,2,40,597} : null;
++            default -> null;
++        };
++        List<Option> options = new ArrayList<>();
++        if (sample == null) {
++            for (Option option : template.getOp()) options.add(new Option(option.id, option.getParam(0)));
++        } else {
++            for (int i = 0; i < sample.length; i += 2) options.add(new Option(sample[i], sample[i + 1]));
++        }
++        return options;
++    }
++
++    public static void addShopMetadata(Item3 item) {
++        if (item.color < 3) return;
++        item.op.add(new Option(129, 10000));
++        int[] sample = switch (item.id) {
++            case 4656 -> new int[]{130,168};
++            case 4659 -> new int[]{130,277,145,98};
++            case 4668 -> new int[]{130,391,167,57};
++            case 4670 -> new int[]{130,261,151,67};
++            case 4673 -> new int[]{130,152,172,99};
++            case 4674 -> new int[]{130,387,155,154};
++            case 4675 -> new int[]{130,237,143,72};
++            case 4784 -> new int[]{130,371,167,77};
++            default -> new int[0];
++        };
++        for (int i = 0; i < sample.length; i += 2) item.op.add(new Option(sample[i], sample[i + 1]));
++    }
++
+     public static int rollStat(int maximum) {
+         if (maximum <= 0 || maximum == Integer.MAX_VALUE) return maximum;
+         int minimum = (int) ((maximum * 9L + 9) / 10);

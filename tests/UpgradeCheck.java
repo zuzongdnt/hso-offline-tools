@@ -36,8 +36,10 @@ public class UpgradeCheck extends ShopCheck {
         check(stat(offer(4760),185)==500 && stat(offer(4760),186)==500);
         check(stat(offer(4760),37)==0 && stat(offer(4760),128)==0);
         check(stat(offer(4741),7)==1500 && stat(offer(4741),15)==1500);
-        check(stat(offer(4634),7)==2500 && stat(offer(4634),122)==10000 && stat(offer(4634),27)==0);
-        check(stat(offer(4755),184)==500 && stat(offer(4755),62)==10000);
+        check(stat(offer(4634),7)==4000 && stat(offer(4634),122)==10000 && stat(offer(4634),27)==0);
+        check(stat(offer(4634),38)==3 && stat(offer(4634),108)==1 && stat(offer(4634),111)==1000);
+        check(stat(offer(4633),23)==39 && stat(offer(4633),37)==3 && stat(offer(4633),109)==1800);
+        check(stat(offer(4755),27)==1500 && stat(offer(4755),28)==1500 && stat(offer(4755),180)==1000);
         check(stat(offer(3602),11)==1000);
         Message wire=new Message(0);offer(4760).writeItemOptions(wire,(byte)0);
         check(new DataInputStream(new ByteArrayInputStream(wire.getData())).readByte()==8);
@@ -55,8 +57,8 @@ public class UpgradeCheck extends ShopCheck {
         for(int id=4780;id<=4788;id++) {
             p.item.bag3[1]=offer(id);GameSrc.Create_Medal(c,request(0,1,3));materials(c,p.tinhtu_material,3);
         }
-        p.item.bag3[2]=offer(4587);p.item.bag3[2].tier=15;
-        GameSrc.Create_Medal(c,request(0,2,3));materials(c,p.tinhtu_material,17);
+        p.item.bag3[2]=offer(4587);p.item.bag3[2].tier=14;
+        GameSrc.Create_Medal(c,request(0,2,3));materials(c,p.tinhtu_material,16);
         Method create=MenuController.class.getDeclaredMethod("Menu_DoTinhTu",Player.class,byte.class);
         create.setAccessible(true);create.invoke(null,p,(byte)0);
         DataInputStream menu=new DataInputStream(new ByteArrayInputStream(c.packet));

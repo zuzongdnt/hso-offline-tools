@@ -1,0 +1,825 @@
+--- a/src/main/java/client/MessageHandler.java
++++ b/src/main/java/client/MessageHandler.java
+@@ -148,10 +148,7 @@
+                 break;
+             }
+             case 20: {
+-                if (conn.p.map.map_id == 48) {
+-                } else {
+-                    conn.p.map.pick_item(conn, m);
+-                }
++                conn.p.map.pick_item(conn, m);
+                 break;
+             }
+             case 11: {
+@@ -372,6 +369,7 @@
+                     }
+                     m22.cleanup();
+                 }
++                conn.p.map.sendCampfire(conn.p);
+                 boolean christmasSnow = Manager.gI().event == 1 && conn.p.map.map_id == 1;
+                 if (christmasSnow || conn.p.map.map_id == 48) {
+                     Message mw = new Message(76);
+--- a/src/main/java/client/Pet.java
++++ b/src/main/java/client/Pet.java
+@@ -47,6 +47,7 @@
+         type = Byte.parseByte(js.get(1).toString());
+         name = name_template[type];
+         icon = Byte.parseByte(js.get(2).toString());
++        if (type == 14 && icon >= 42 && icon <= 44) icon += 3;
+         nframe = Byte.parseByte(js.get(3).toString());
+         color = Byte.parseByte(js.get(4).toString());
+         grown = Short.parseShort(js.get(5).toString());
+@@ -195,7 +196,7 @@
+             }
+             case ID_CAT:
+             case 4768: {
+-                temp.icon = (byte) (id == ID_CAT ? 42 : 39);
++                temp.icon = (byte) (id == ID_CAT ? 45 : 39);
+                 temp.type = (byte) (id == ID_CAT ? 14 : 13);
+                 id_ = new byte[]{23, 24, 25, 26, 48, 80, 85, 86, 114, 1}; // chir so
+                 param_ = new int[]{1, 1, 1, 1, 1500, 100, 100, 1000, 2, 1000};
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -173,6 +173,19 @@
+         }
+         Service.send_notice_box(conn, "Chưa có sách kỹ năng phù hợp.");
+     }
++    public synchronized void resetSkillUpgrade(boolean physical, short potion) throws IOException {
++        int physicalIndex = clazz == 0 || clazz == 3 ? 19 : 20;
++        int index = physical ? physicalIndex : 39 - physicalIndex;
++        if (isdie || is_detu_training || getSkillUpgrade(index) == 0 || item.total_item_by_id(4, potion) <= 0) {
++            Service.send_notice_box(conn, "Chưa có cấp nâng cấp phù hợp để tẩy.");
++            return;
++        }
++        item.remove(4, potion, 1);
++        skillUpgrade[index - 19] = 0;
++        pendingSkillUpgrade = -1;
++        Service.send_notice_box(conn, "Đã tẩy cấp nâng cấp của " + skills[index].name + ".");
++    }
++
+     public long[] time_delay_skill;
+     public Body body;
+     public int maxbag;
+@@ -1537,19 +1550,20 @@
+     }
+ 
+     public void update_Exp(long expup, boolean expmulti) throws IOException {
++        if (type_exp == 0 || level >= Manager.gI().lvmax || getlevelpercent() < -500
++                || (expup > 0 && body.total_item_param(122) > 0)) {
++            return;
++        }
+         long dame_exp = expup;
+         if (expmulti && this.getlevelpercent() >= 0) {
+             dame_exp *= Manager.gI().exp;
+             dame_exp += dame_exp * body.total_item_param(51) / 10_000;
++            if (dame_exp > 0 && map != null) {
++                dame_exp += dame_exp * map.campfireExpPercent(this) / 100;
++            }
+         }
+         if (type_use_mount == 4) {
+             dame_exp += ((dame_exp * 5) / 100);
+-        }
+-        if ((type_exp == 0 && this.typepk != 0) || this.getlevelpercent() < (-500)) {
+-            return;
+-        }
+-        if (level >= Manager.gI().lvmax || type_exp == 0) {
+-            return;
+         }
+         Message m;
+         if (this.getlevelpercent() < 0) {
+--- a/src/main/java/client/Process_Yes_no_box.java
++++ b/src/main/java/client/Process_Yes_no_box.java
+@@ -791,13 +791,6 @@
+                 case 119: {
+     Dungeon d = DungeonManager.get_list(conn.p.party != null ? conn.p.party.getLeader().name : conn.p.name);
+     if (d == null) {
+-        try {
+-            d = new Dungeon();
+-        } catch (IOException e) {
+-            e.printStackTrace();
+-        }
+-
+-        if (d != null) {
+             List<Player> playersToEnter = new ArrayList<>();
+ 
+             if (conn.p.party != null) {
+@@ -821,6 +814,7 @@
+                 playersToEnter.add(conn.p);
+             }
+ 
++            d = new Dungeon(playersToEnter);
+             for (Player p : playersToEnter) {
+                 p.point_active[0]--;
+                 p.dungeon = d;
+@@ -828,14 +822,12 @@
+                 p.y = 672;
+                 MapService.leave(p.map, p);
+                 p.map = d.template;
+-                d.template.players.add(p);
+                 MapService.enter(p.map, p);
+                 d.send_map_data(p);              // Gửi thông tin map
+                 d.send_mob_move_when_exit(p);    // Gửi vị trí quái (quan trọng!)
+             }
+ 
+             d.name_party = conn.p.party != null ? conn.p.party.getLeader().name : conn.p.name;
+-            d.setMode(0); // độ khó mặc định
+             DungeonManager.add_list(d);
+ 
+             // nhiệm vụ tinh tú
+@@ -844,16 +836,11 @@
+                 if (p.nv_tinh_tu[0] == 13 && p.nv_tinh_tu[1] < p.nv_tinh_tu[2]) p.nv_tinh_tu[1]++;
+             }
+ 
+-        } else {
+-            Service.send_notice_box(conn, "Lỗi tạo phó bản, hãy thử lại sau!");
+-        }
+-
+     } else {
+         // Nếu dungeon đã tồn tại → chỉ cho vào lại
+         MapService.leave(conn.p.map, conn.p);
+         conn.p.map = d.template;
+         conn.p.dungeon = d;
+-        d.template.players.add(conn.p);
+         MapService.enter(conn.p.map, conn.p);
+         d.send_map_data(conn.p);
+         d.send_mob_move_when_exit(conn.p);
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -79,7 +79,21 @@
+     }
+ 
+     private static void use_item4_default(Session conn, short id) throws IOException {
++        Manager manager = Manager.gI();
++        if (id == manager.lisaPhysicalReset || id == manager.lisaMagicReset) {
++            conn.p.resetSkillUpgrade(id == manager.lisaPhysicalReset, id);
++            return;
++        }
++        if (id == manager.lisaMistTicket || id == manager.lisaAntidote) {
++            Service.send_notice_box(conn, "Vật phẩm này chưa sử dụng được trong bản offline.");
++            return;
++        }
+         switch (id) {
++            case 67:
++            case 68: {
++                conn.p.map.useCampfire(conn.p, id);
++                break;
++            }
+             case 57:
+ 			case 58:
+ 			case 59:
+--- a/src/main/java/core/Manager.java
++++ b/src/main/java/core/Manager.java
+@@ -74,6 +74,10 @@
+     public int time_login;
+     public List<ItemSell3[]> itemsellTB;
+     public short[] itempoitionsell;
++    public short lisaPhysicalReset = -1;
++    public short lisaMagicReset = -1;
++    public short lisaMistTicket = -1;
++    public short lisaAntidote = -1;
+     public short[] item7sell;
+     public VXMM vxmm;
+     public int size_mob_now = -20;
+@@ -272,7 +276,9 @@
+             }
+ 
+             temp.setName(rs.getString("name"));
+-            temp.setContent(rs.getString("content"));
++            temp.setContent(temp.getId() == 67
++                    ? "Cộng thêm 2000% EXP khi đứng gần. Thời gian sử dụng 1 tiếng."
++                    : rs.getString("content"));
+             temp.setType(rs.getByte("typepotion"));
+             temp.setPricetype(rs.getByte("moneytype"));
+             temp.setSell(rs.getByte("sell"));
+@@ -429,6 +435,7 @@
+         rs.close();
+         //
+         template.OfflineSkins.loadItems();
++        loadLisaStock();
+         template.HeroArmor.installMaterials();
+         item7sell = template.ItemSellCoin.configure(item7sell);
+         System.out.println("item loaded!");
+@@ -905,4 +912,44 @@
+     public synchronized void remove_list_nhanbban(NhanBan nhanban) {
+         this.list_nhanban.remove(nhanban);
+     }
++    private void loadLisaStock() {
++        lisaMistTicket = addLisaItem(260, "Vé vào làng phủ sương",
++                "Vé dùng để vào Làng phủ sương.", 80, 10);
++        lisaPhysicalReset = addLisaItem(261, "Thuốc tẩy nâng cấp kĩ năng vật lý 110",
++                "Đặt cấp nâng cấp của kĩ năng vật lý 110 về 0.", 84, 20);
++        lisaMagicReset = addLisaItem(262, "Thuốc tẩy nâng cấp kĩ năng ma pháp 110",
++                "Đặt cấp nâng cấp của kĩ năng ma pháp 110 về 0.", 84, 20);
++        lisaAntidote = addLisaItem(264, "Thuốc giải", "Giải độc ma sói.", 19, 5);
++        short[] originalOrder = {
++            lisaPhysicalReset, lisaMagicReset, lisaMistTicket, 236, 241, 2, 25,
++            3, 4, 5, 6, 7, 8, 9,
++            10, 11, 12, 13, 26, 14, 15,
++            16, 17, 24, 52, 56, 57, 58,
++            59, 61, 67, 68, 69, 62, 135,
++            143, 166, 170, 164, 168, 219, 220,
++            226, 225, 227, 111, 104, lisaAntidote, 249
++        };
++        java.util.Set<Short> stock = new java.util.LinkedHashSet<>();
++        for (short id : originalOrder) stock.add(id);
++        for (short id : itempoitionsell) stock.add(id);
++        itempoitionsell = new short[stock.size()];
++        int index = 0;
++        for (short id : stock) itempoitionsell[index++] = id;
++    }
++
++    private short addLisaItem(int icon, String name, String description, int type, int price) {
++        ItemTemplate4 item = new ItemTemplate4();
++        item.setId((short) ItemTemplate4.item.size());
++        item.setIcon((short) icon);
++        item.setName(name);
++        item.setContent(description);
++        item.setType((byte) type);
++        item.setValue((short) 1);
++        item.setPrice(price);
++        item.setPricetype((byte) 1);
++        item.setSell((byte) 1);
++        ItemTemplate4.item.add(item);
++        return item.getId();
++    }
++
+ }
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -216,10 +216,7 @@
+         }
+         m.writer().writeUTF("k2: ");
+         m.writer().writeLong(0);
+-        m.writer().writeByte(p.fashion.length);
+-        for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeShort(Service.get_fashion_part(p.fashion[i]));
+-        }
++        writeFashionParts(m, p);
+         m.writer().writeByte(3); // nap tien?
+         m.writer().writeShort(get_id_mat_na(p)); // id mat na
+         m.writer().writeByte(1); // paint mat na trc sau
+@@ -257,9 +254,17 @@
+     public static short get_id_hair(Player p) {
+         short result = -1;
+         if (p.item.wear[16] != null) {
+-            result = (short) (p.item.wear[16].part + 41);
++            result = (short) (Byte.toUnsignedInt(p.item.wear[16].part) + 41);
+         }
+         return result;
++    }
++
++    public static void writeFashionParts(Message m, Player p) throws IOException {
++        boolean hideHat = p.item.wear[16] != null || (p.item.wear[13] != null && p.fashion[2] == -1);
++        m.writer().writeByte(p.fashion.length);
++        for (int i = 0; i < p.fashion.length; i++) {
++            m.writer().writeShort(i == 2 && hideHat ? -2 : get_fashion_part(p.fashion[i]));
++        }
+     }
+ 
+     public static int get_fashion_part(byte part) {
+@@ -495,12 +500,18 @@
+         } else {
+             m.writer().writeByte(-1); // pet
+         }
+-        m.writer().writeByte(p.fashion.length);
+-        for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeShort(Service.get_fashion_part(p.fashion[i]));
+-        }
++        writeFashionParts(m, p);
+         p.conn.addmsg(m);
+         m.cleanup();
++        Item3 weapon = p.item.wear[0];
++        if (p.map != null && weapon != null) {
++            for (short gem : p.item.check_kham_ngoc(weapon)) {
++                if (gem >= 23 && gem <= 32) {
++                    MapService.send_in4_other_char(p.map, p, p);
++                    break;
++                }
++            }
++        }
+     }
+ 
+     public static void save_rms(Session conn, Message m) throws IOException {
+@@ -734,18 +745,9 @@
+         String name = m.reader().readUTF();
+         byte type = m.reader().readByte();
+         if (type == 0) { // xem thong tin other
+-            Player p0 = null;
+-            for (Map[] map : Map.entrys) {
+-                for (Map map0 : map) {
+-                    for (int i = 0; i < map0.players.size(); i++) {
+-                        Player p01 = map0.players.get(i);
+-                        if (p01.name.equals(name)) {
+-                            p0 = p01;
+-                            break;
+-                        }
+-                    }
+-                }
+-            }
++            Player p0 = conn.p.map.players.stream()
++                    .filter(player -> name.equalsIgnoreCase(player.name)).findFirst().orElse(null);
++            if (p0 == null) p0 = Map.get_player_by_name(name);
+             if (p0 != null) {
+                 send_notice_nobox_white(p0.conn, conn.p.name + " đang dòm ngó đồ đạc của bạn");
+                 Message m2 = new Message(49);
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -1,6 +1,7 @@
+ package event_daily;
+ 
+ import client.Body;
++import client.Clan;
+ import client.Item;
+ import client.Player;
+ import core.Manager;
+@@ -107,6 +108,12 @@
+         bot.list_eff = new ArrayList<>();
+         bot.list_enemies = new ArrayList<>();
+         bot.mypet = new ArrayList<>();
++        bot.nv_tinh_tu = new short[3];
++        bot.myclan = new Clan();
++        bot.myclan.name_clan = "Thiên Long Hội";
++        bot.myclan.name_clan_shorted = "TLH";
++        bot.myclan.icon = 820;
++        bot.myclan.mems = List.of();
+         bot.kinhmach = new int[]{1, 0};
+         bot.tutien = new int[2];
+         bot.skill_point = new byte[21];
+@@ -149,7 +156,11 @@
+         equip(bot, 3, 4669);
+         equip(bot, 9, 4669);
+         equip(bot, 11, clazz == 2 ? 3603 : 3602);
+-        equip(bot, 12, new int[]{4587,4589,4588,4590}[clazz]);
++        equip(bot, 12, new int[]{4587, 4589, 4588, 4590}[clazz]);
++        equip(bot, 13, 4736 + clazz % 2);
++        equip(bot, 14, 4840 + clazz % 3);
++        equip(bot, 16, clazz % 2 == 0 ? 4846 : 4847);
++        template.RankBadge.setRank(bot, 2 + clazz);
+         bot.fashion = template.Part_fashion.get_part(bot);
+         bot.hp = bot.body.get_max_hp();
+         bot.mp = bot.body.get_max_mp();
+@@ -157,11 +168,14 @@
+     }
+ 
+     private static void equip(Player bot, int slot, int id) {
+-        Item3 item = ItemSellCoin.entry.stream().filter(offer -> offer.id == id).findFirst().orElseThrow().createItem();
+-        item.tier = 15;
++        ItemSellCoin offer = ItemSellCoin.entry.stream().filter(item -> item.id == id).findFirst().orElse(null);
++        if (offer == null && slot >= 13) return;
++        if (offer == null) throw new IllegalStateException("Missing Lôi đài item " + id);
++        Item3 item = offer.createItem();
++        item.tier = (byte) (slot <= 12 ? 15 : 0);
+         if (slot == 0 && item.op.stream().noneMatch(option -> option.id == 37))
+             item.op.add(new Option(37, 2));
+-        item.level = (short) (45 + (bot.level - 45) / 10 * 10);
++        if (slot <= 10) item.level = (short) (45 + (bot.level - 45) / 10 * 10);
+         if (item.type == 16) {
+             item.op.removeIf(option -> option.id == 96);
+             item.op.add(new Option(Item3.getClassDamageOptionId(bot.clazz),400));
+@@ -205,13 +219,14 @@
+             if (p1.isdie || p2.isdie || secondsLeft() == 0) {
+                 if (p2.isdie && !p1.isdie) wins++;
+                 if (p1.isdie && !p2.isdie) losses++;
++                Service.send_notice_nobox_white(p1.conn, "Hiệp " + round + " kết thúc. Tỷ số " + wins + "-" + losses + ".");
+                 if (wins == 2 || losses == 2 || round == 3) finish();
+                 else {
+                     round++;
++                    state_ld = 0;
+                     resetFighters();
+                     nextAttack = 0;
+                     setTimer(1);
+-                    state_ld = 0;
+                 }
+             } else if (System.nanoTime() >= nextAttack) {
+                 nextAttack = System.nanoTime() + 500_000_000L;
+@@ -261,6 +276,7 @@
+             fighter.mp = fighter.body.get_max_mp();
+         }
+         Service.send_char_main_in4(p1);
++        Service.usepotion(p2, 0, 0);
+         MapService.send_in4_other_char(map, p1, p2);
+     }
+ 
+@@ -296,7 +312,8 @@
+         message.writer().writeByte(1);
+         message.writer().writeByte(1);
+         message.writer().writeShort(secondsLeft());
+-        message.writer().writeUTF(finished ? "Kết thúc Lôi đài" : "Lôi đài · Hiệp " + round);
++        message.writer().writeUTF((finished ? "Kết thúc Lôi đài" : "Lôi đài · Hiệp " + round)
++                + " · " + wins + "-" + losses);
+         p1.conn.addmsg(message);
+     }
+ 
+--- a/src/main/java/map/Dungeon.java
++++ b/src/main/java/map/Dungeon.java
+@@ -6,6 +6,7 @@
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
++import java.util.stream.Collectors;
+ import client.Pet;
+ import client.Player;
+ import core.Manager;
+@@ -30,15 +31,26 @@
+     private int num_mob;
+     private int num_mob_max;
+     private int dame_buff;
+-    private int id_mob_in_wave;
++    private List<Mob> mobTemplates;
++    private Mob waveMob;
+     public int index_mob;
+     private int hp;
+     public String name_party;
+     private byte mode_now;
+     private List<Mob_Dungeon> mobs;
+ 
+-    public Dungeon() throws IOException {
++    public Dungeon(List<Player> players) throws IOException {
++        int maxLevel = players.stream().mapToInt(player -> player.level).max().orElseThrow();
++        int closest = Mob.entrys.stream().filter(Dungeon::isNormalMob)
++                .mapToInt(mob -> Math.abs(mob.level - maxLevel)).min().orElseThrow();
++        mobTemplates = Mob.entrys.stream().filter(Dungeon::isNormalMob)
++                .filter(mob -> Math.abs(mob.level - maxLevel) == closest).collect(Collectors.toList());
+         init();
++    }
++
++    private static boolean isNormalMob(Mob mob) {
++        return mob.mob_id < 202 && (mob.mob_id < 167 || mob.mob_id > 172)
++                && (mob.typemove == 0 || mob.typemove == 3 || mob.typemove == 10) && mob.hpmax > 0;
+     }
+ 
+     private void init() throws IOException {
+@@ -46,13 +58,14 @@
+         template = new Map(48, 0, temp.npc_name_data, temp.name, temp.typemap, temp.ismaplang, temp.showhs,
+                 temp.maxplayer, temp.maxzone, temp.vgos);
+         template.mobs = new Mob_in_map[0];
+-        template.start_map();
+         template.d = this;
+         time_live = System.currentTimeMillis();
+         index_mob = Manager.gI().size_mob;
+         state = -1;
+         wave = 1;
+         mobs = new ArrayList<>();
++        setMode(0);
++        template.start_map();
+         // num_boss = 0;
+     }
+ 
+@@ -66,12 +79,12 @@
+         int time_now = getTime_live();
+         try {
+             if (this.state == -1) {
+-                if (time_now == 4) {
++                if (time_now >= 4) {
+                     this.state = 0;
+                     notice_all_player_in_dungeon("Hiệp 1 sẽ bắt đầu sau 10s");
+                 }
+             } else if (this.state == 0) { // wait to begin
+-                if (time_now == 13) {
++                if (time_now >= 13) {
+                     this.state = 1;
+                 }
+             } else if (this.state == 1) { // wait at wave 20
+@@ -99,11 +112,7 @@
+                     notice_all_player_in_dungeon("Hiệp " + (wave++) + " bắt đầu");
+                     this.num_mob = num_mob_max;
+                     mobs.clear();
+-                    if (wave <= 198) {
+-                        id_mob_in_wave = wave - 1;
+-                    } else {
+-                        id_mob_in_wave = Util.random(0, 198);
+-                    }
++                    waveMob = mobTemplates.get((wave - 2) % mobTemplates.size());
+                 } else {
+                    
+                     notice_all_player_in_dungeon("Vượt thành công, xin chúc mừng các đại hiệp, sẽ tự động thoát sau 30s");
+@@ -146,7 +155,7 @@
+                 }
+             } else if (this.state == 2) { // fight
+                 if (mobs.size() < num_mob_max) {
+-                    Mob_Dungeon mob = new Mob_Dungeon(this.index_mob++, Mob.entrys.get(id_mob_in_wave));
++                    Mob_Dungeon mob = new Mob_Dungeon(this.index_mob++, waveMob);
+                     mob.x = 1308;
+                     mob.y = 672 + Util.random(-25, 25);
+                     mob.from_gate = 2;
+@@ -298,7 +307,8 @@
+             }
+         }
+         if (is_atk) {
+-            long dame = (mob.hpmax / 100) * (mob.template.level / 2);
++            Mob originalWave = Mob.entrys.get(wave - 1);
++            long dame = (originalWave.hpmax / 100L) * (originalWave.level / 2);
+             dame += this.wave * 10;
+             dame *= dame_buff;
+             Message m = new Message(10);
+@@ -309,9 +319,8 @@
+             m.writer().writeByte(1);
+             m.writer().writeShort(32001); // index thien thach
+             m.writer().writeInt((int)dame); // dame mob
+-            this.hp -= dame;
+-            if (this.hp < 0) {
+-                this.hp = 0;
++            this.hp = (int) Math.max(0, this.hp - dame);
++            if (this.hp == 0) {
+                 this.state = 5;
+             }
+             m.writer().writeInt(this.hp);
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -64,6 +64,82 @@
+     public int num_mob_super;
+     public Dungeon d;
+     public LoiDai ld;
++    private static final short CAMPFIRE_ACTOR = 31090;
++    private static final int CAMPFIRE_RADIUS = 144;
++    private static final int CAMPFIRE_EXP_PERCENT = 2000;
++    private Campfire campfire;
++
++    private record Campfire(short x, short y, long until, int oil) {
++        boolean isNear(Player player) {
++            int radius = CAMPFIRE_RADIUS + oil * 10;
++            long dx = (long) player.x - x;
++            long dy = (long) player.y - y;
++            return dx * dx + dy * dy <= (long) radius * radius;
++        }
++    }
++
++    public synchronized void useCampfire(Player player, short item) throws IOException {
++        if (player.isdie || ld != null || d != null || Map.is_map_chien_truong(map_id)) {
++            Service.send_notice_box(player.conn, "Không thể dùng vật phẩm này ở đây.");
++            return;
++        }
++        if (player.item.total_item_by_id(4, item) <= 0) return;
++        expireCampfire();
++        if (item == 68) {
++            if (campfire == null || !campfire.isNear(player) || campfire.oil() >= 5) {
++                Service.send_notice_box(player.conn, "Đến gần Lửa thiêng và châm tối đa 5 Bình dầu.");
++                return;
++            }
++            player.item.remove(4, item, 1);
++            campfire = new Campfire(campfire.x(), campfire.y(), campfire.until(), campfire.oil() + 1);
++        } else {
++            if (campfire != null) {
++                Service.send_notice_box(player.conn, "Khu này đang có Lửa thiêng.");
++                return;
++            }
++            player.item.remove(4, item, 1);
++            campfire = new Campfire(player.x, player.y, System.currentTimeMillis() + 3_600_000L, 0);
++            for (Player viewer : players) sendCampfire(viewer);
++        }
++    }
++
++    public synchronized int campfireExpPercent(Player player) {
++        return campfire != null && campfire.until() > System.currentTimeMillis() && campfire.isNear(player)
++                ? CAMPFIRE_EXP_PERCENT + campfire.oil() * 5 : 0;
++    }
++
++    public synchronized void sendCampfire(Player player) throws IOException {
++        if (campfire == null || campfire.until() <= System.currentTimeMillis()) return;
++        int zoom = Math.max(1, Math.min(4, player.conn.zoomlv));
++        byte[] effect = Util.loadfile("data/part_char/imgver/x" + zoom + "/111_0");
++        int start = 4 + java.nio.ByteBuffer.wrap(effect).getInt();
++        Message packet = new Message(-49);
++        packet.writer().writeByte(1);
++        packet.writer().writeShort(effect.length - start);
++        packet.writer().write(effect, start, effect.length - start);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(0); // native fire sprite
++        packet.writer().writeShort(campfire.x());
++        packet.writer().writeShort(campfire.y());
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(0);
++        packet.writer().writeShort(CAMPFIRE_ACTOR);
++        packet.writer().writeShort(0);
++        packet.writer().writeByte(1); // avoid duplicate actor when the map is refreshed
++        player.conn.addmsg(packet);
++        packet.cleanup();
++    }
++
++    private synchronized void expireCampfire() throws IOException {
++        if (campfire == null || campfire.until() > System.currentTimeMillis()) return;
++        campfire = null;
++        Message packet = new Message(-49);
++        packet.writer().writeByte(101);
++        packet.writer().writeShort(CAMPFIRE_ACTOR);
++        for (Player viewer : players) viewer.conn.addmsg(packet);
++        packet.cleanup();
++    }
+     private long time_chat;
+ 
+     public Map(int id, int zone, String[] npc_name, String name, byte typemap, boolean ismaplang, boolean showhs,
+@@ -327,6 +403,7 @@
+ 
+     private void update() {
+         try {
++            expireCampfire();
+             for (int i1 = 0; i1 < players.size(); i1++) {
+                 Player p = players.get(i1);
+                 if (this.map_id == 50) { // pet_manager
+@@ -1259,6 +1336,7 @@
+     public synchronized void pick_item(Session conn, Message m2) throws IOException {
+         short id = m2.reader().readShort();
+         byte type = m2.reader().readByte();
++        if (conn.p.isdie || id < 0 || id >= item_map.length) return;
+         if (item_map[id] == null) {
+             Message m = new Message(20);
+             m.writer().writeByte(type);
+@@ -1292,10 +1370,6 @@
+             return;
+         }
+         type = item_map[id].category;
+-        if (conn.p.isdie || conn.p.in4_auto[3] == 0
+-                || (conn.p.in4_auto[4] == -1 && conn.p.in4_auto[5] == 1 && conn.p.in4_auto[6] == 3)) {
+-            return;
+-        }
+         if (item_map[id].idmaster != -1 && conn.p.id != item_map[id].idmaster) {
+             Service.send_notice_nobox_white(conn, "Vật phẩm của người khác");
+             return;
+@@ -1303,24 +1377,21 @@
+         if (item_map[id] != null && (item_map[id].idmaster == -1 || conn.p.id == item_map[id].idmaster)
+                 && (item_map[id].time_pick < System.currentTimeMillis())) {
+             if (type == 4 && item_map[id].id_item == -1) { // vang
+-                if (conn.p.in4_auto[5] == 0) {
+-                    conn.p.update_vang(item_map[id].quantity);
+-                    conn.p.item.char_inventory(5);
+-                    Message m = new Message(20);
+-                    m.writer().writeByte(type);
+-                    m.writer().writeShort(id);
+-                    m.writer().writeShort(conn.p.id);
+-                    MapService.send_msg_player_inside(this, conn.p, m, true);
+-                    m.cleanup();
+-                    item_map[id] = null;
+-
+-                }
++                conn.p.update_vang(item_map[id].quantity);
++                conn.p.item.char_inventory(5);
++                Message m = new Message(20);
++                m.writer().writeByte(type);
++                m.writer().writeShort(id);
++                m.writer().writeShort(conn.p.id);
++                MapService.send_msg_player_inside(this, conn.p, m, true);
++                m.cleanup();
++                item_map[id] = null;
+             } else if (item_map[id].id_item != -1) {
+                 if (conn.p.item.get_bag_able() > 0
+                         || ((type == 4 || type == 7) && (conn.p.item.total_item_by_id(type, item_map[id].id_item) > 0))) {
+                     switch (type) {
+                         case 3: {
+-                            if (item_map[id].id_item < ItemTemplate3.item.size()) {
++                            if (item_map[id].id_item >= 0 && item_map[id].id_item < ItemTemplate3.item.size()) {
+                                 Short idadd = item_map[id].id_item;
+                                 Item3 itbag = new Item3();
+                                 itbag.id = idadd;
+@@ -1346,22 +1417,14 @@
+ 										conn.p.nv_tinh_tu[1]++;
+ 									}
+ 								}
+-                                if (conn.p.in4_auto[4] > itbag.color) {
+-                                    return;
+-                                }
+                                 conn.p.item.add_item_bag3(itbag);
+                                 conn.p.item.char_inventory(3);
+                             }
+                             break;
+                         }
+                         case 4: {
+-                            if (item_map[id].id_item < ItemTemplate4.item.size()) {
++                            if (item_map[id].id_item >= 0 && item_map[id].id_item < ItemTemplate4.item.size()) {
+                                 Short idadd = item_map[id].id_item;
+-                                if (ItemTemplate4.item.get(idadd).getType() == 1 && conn.p.in4_auto[6] == 1) {
+-                                    return;
+-                                } else if (ItemTemplate4.item.get(idadd).getType() == 0 && conn.p.in4_auto[6] == 2) {
+-                                    return;
+-                                }
+                                 Item47 itbag = new Item47();
+                                 itbag.id = idadd;
+                                 itbag.quantity = (short) item_map[id].quantity;
+@@ -1372,7 +1435,7 @@
+                             break;
+                         }
+                         case 7: {
+-                            if (item_map[id].id_item < ItemTemplate7.item.size()) {
++                            if (item_map[id].id_item >= 0 && item_map[id].id_item < ItemTemplate7.item.size()) {
+                                 Short idadd = item_map[id].id_item;
+                                 Item47 itbag = new Item47();
+                                 itbag.id = idadd;
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1567,9 +1567,9 @@
+                         m.writer().writeByte(Service.get_weapon_part(temp));
+                     }
+                     m.writer().writeByte(3);
+-                    m.writer().writeShort(-1);
+-                    m.writer().writeShort(-1);
+-                    m.writer().writeShort(-1);
++                    for (short gem : p0.item.check_kham_ngoc(temp)) {
++                        m.writer().writeShort(gem >= 0 ? gem : -1);
++                    }
+                     m.writer().writeShort(-1); // eff
+                 }
+             }
+@@ -1594,10 +1594,7 @@
+             } else {
+                 m.writer().writeByte(-1); // pet
+             }
+-            m.writer().writeByte(p0.fashion.length);
+-            for (int i = 0; i < p0.fashion.length; i++) {
+-                m.writer().writeShort(Service.get_fashion_part(p0.fashion[i]));
+-            }
++            Service.writeFashionParts(m, p0);
+             //
+             m.writer().writeShort(p0.id_henshin);
+             m.writer().writeByte(p0.type_use_mount);
+@@ -2298,13 +2295,13 @@
+             return;
+         }
+         if (map.ld != null) {
+-            if (!(map.ld != null && map.ld.state_ld == 1
++            if (!(map.ld.state_ld == 1 && !p.isdie
+                     && (p0.id == map.ld.p1.id || p0.id == map.ld.p2.id) && (p.id == map.ld.p1.id || p.id == map.ld.p2.id))) {
+                 return;
+             }
+         }
+         if (p0.isdie) {
+-            MapService.die_by_player(map, p0, p);
++            if (map.ld == null) MapService.die_by_player(map, p0, p);
+             return;
+         }
+         	if (Manager.gI().event == 2 && p.item.wear[11] != null
+@@ -2695,8 +2692,10 @@
+         if (p0.hp <= 0) {
+ 
+             p0.hp = 0;
+-            if (!p0.isdie) {
+-                	Session conn = p.conn;
++            if (map.ld != null) {
++                if (!p0.isdie) MapService.die_by_player(map, p0, p);
++            } else if (!p0.isdie) {
++                Session conn = p.conn;
+ 				if (conn.p.nv_tinh_tu[0] == 26 && conn.p.nv_tinh_tu[1] < conn.p.nv_tinh_tu[2]) {
+ 					conn.p.nv_tinh_tu[1]++;
+ 				}
+@@ -2860,19 +2859,6 @@
+     }
+ 
+     public static void die_by_player(Map map, Player p, Player p0) throws IOException {
+-        if (map.ld != null) {
+-            if (map.ld.p1.id == p.id) {
+-                for (int i = 0; i < map.players.size(); i++) {
+-                    Player p00 = map.players.get(i);
+-                    Service.send_notice_nobox_white(p00.conn, map.ld.p2.name + " dành chiến thắng ở hiệp " + map.ld.round);
+-                }
+-            } else if (map.ld.p2.id == p.id) {
+-                for (int i = 0; i < map.players.size(); i++) {
+-                    Player p00 = map.players.get(i);
+-                    Service.send_notice_nobox_white(p00.conn, map.ld.p1.name + " dành chiến thắng ở hiệp " + map.ld.round);
+-                }
+-            }
+-        }
+         p.dame_affect_special_sk = 0;
+         p.hp = 0;
+         p.isdie = true;
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -2,6 +2,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.stream.Collectors;
+ import org.json.simple.JSONArray;
+ import org.json.simple.JSONValue;
+ 
+@@ -154,10 +155,10 @@
+     public static final java.util.Set<Integer> REMOVED_GOLD_STOCK = java.util.Set.of(
+         4587,4588,4589,4590,4656,4657,4658,4659,4660,4661,4662,4663,4664,4665,4666,4667,
+         4668,4669,4670,4671,4672,4673,4674,4675,4780,4781,4782,4783,4784,4785,4786,4787,4788,
+-        4719,4731);
++        4719,4731,4807,4808,4809,4810,4811,4812,4813,4814,4843,4844);
+ 
+     public static List<ItemSellCoin> goldStock() {
+-        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).toList();
++        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
+     }
+ 
+     public boolean available() {
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -8,6 +8,7 @@
+ import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.Set;
++import java.util.stream.Collectors;
+ import org.json.simple.JSONArray;
+ import org.json.simple.JSONObject;
+ import org.json.simple.JSONValue;
+@@ -140,7 +141,7 @@
+                         || itemReleases.getOrDefault(offer.id, 0) > previous
+                         || previous == 0 && has(offer.id) && !isCraftedArmor(offer.id) && offer.id != client.Pet.ID_CAT
+                         || previous < 2 && isOriginalWeaponSkin(offer.id))
+-                .toList();
++                .collect(Collectors.toList());
+         var mounts = new ArrayList<Short>();
+         if (previous == 0) for (short id : ItemSellCoin.MOUNTS)
+             if (player.item.total_item_by_id(4, id) == 0) mounts.add(id);

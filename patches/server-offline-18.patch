@@ -1,0 +1,33 @@
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -1151,7 +1151,7 @@
+             m.writer().writeShort(-1);
+             m.writer().writeShort(-1);
+             m.writer().writeShort(3); // pet
+-            m.writer().writeShort(Map.hat); // hat
++            m.writer().writeShort(50); // TOP Hiếu Chiến crown
+             m.writer().writeShort(Map.leg); // leg
+             m.writer().writeShort(-1);
+             m.writer().writeShort(-1);
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -252,6 +252,10 @@
+     }
+ 
+     public static short get_id_hair(Player p) {
++        if (p.item.wear[11] == null && p.item.wear[16] != null) {
++            if (p.item.wear[16].id == 4807) return 159;
++            if (p.item.wear[16].id == 4808) return 160;
++        }
+         short result = -1;
+         if (p.item.wear[11] == null && p.item.wear[16] != null
+                 && template.OfflineSkins.nativeHair(p) < 0) {
+@@ -265,7 +269,7 @@
+         short nativeHair = template.OfflineSkins.nativeHair(p);
+         boolean crown = p.item.wear[11] == null && p.item.wear[16] == null
+                 && !p.is_detu_training && "zuzong".equalsIgnoreCase(p.name);
+-        boolean hideHat = showHair || (p.item.wear[13] != null && p.fashion[2] == -1);
++        boolean hideHat = showHair || (p.item.wear[13] != null && p.item.wear[13].id != 4868 && p.fashion[2] == -1);
+         m.writer().writeByte(p.fashion.length);
+         for (int i = 0; i < p.fashion.length; i++) {
+             m.writer().writeShort(i == 2 && crown ? 50 : i == 2 && hideHat ? -2

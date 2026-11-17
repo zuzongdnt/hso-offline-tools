@@ -1,0 +1,821 @@
+--- a/src/main/java/client/Body.java
++++ b/src/main/java/client/Body.java
+@@ -117,7 +117,7 @@
+     }
+ 
+     public int total_item_param(int id) {
+-        int param = 0;
++        int param = template.OfflineSkins.mountParam(p, id);
+         byte byteId = (byte) id;
+         for (int i = 0; i < p.item.wear.length; i++) {
+             Item3 temp = p.item.wear[i];
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -1768,6 +1768,7 @@
+ 			case 1: {
+ 				short id_p = m2.reader().readShort();
+ 				Player p0 = Map.get_player_by_id(id_p);
++				if (core.OfflineMarket.view(conn, p0)) return;
+ 				if (p0 != null && !p0.my_store_name.isEmpty()) {
+ 					GameSrc.update_store_player_to_other(p0, conn);
+ 				}
+@@ -1778,6 +1779,7 @@
+ 				short idChar = m2.reader().readShort();
+ 				byte idType = m2.reader().readByte();
+ 				Player p0 = Map.get_player_by_id(idChar);
++				if (core.OfflineMarket.buy(conn, p0, iditem, idType)) return;
+ 				if (p0 != null && !p0.my_store_name.isEmpty()) {
+ 					for (int i = 0; i < p0.my_store.size(); i++) {
+ 						if (p0.my_store.get(i).it_type == 3 && p0.item.bag3[p0.my_store.get(i).it_id] != null
+--- a/src/main/java/core/Manager.java
++++ b/src/main/java/core/Manager.java
+@@ -160,6 +160,9 @@
+         } catch (Exception e) {
+             // column already exists
+         }
++        try { OfflineTools.restorePending(); } catch (Exception error) {
++            throw new IOException("Không khôi phục được dữ liệu", error);
++        }
+         // load item3
+         Connection conn = SQL.gI().getConnection();
+         Statement ps = conn.createStatement();
+--- /dev/null
++++ b/src/main/java/core/OfflineMarket.java
+@@ -0,0 +1,135 @@
++package core;
++
++import client.Player;
++import event_daily.LoiDai;
++import io.Message;
++import io.Session;
++import java.io.IOException;
++import java.text.Normalizer;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import template.Item3;
++import template.ItemSellCoin;
++import template.Option;
++
++/** Permanent offline merchants reuse the normal player-shop protocol. */
++public final class OfflineMarket {
++    private static final Map<Integer, Integer> TIERS = new HashMap<>();
++    private static final int[] MEDALS = {4587, 4589, 4588, 4590};
++    private OfflineMarket() {}
++    public static boolean isMerchant(Player player) { return TIERS.containsKey(player.id); }
++
++    public static void populate() {
++        for (map.Map[] zones : map.Map.entrys) {
++            if (zones.length == 0) continue;
++            String name = Normalizer.normalize(zones[0].name, Normalizer.Form.NFD)
++                    .replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
++            if (!name.contains("khu mua ban")) continue;
++            map.Map market = zones[0];
++            try {
++                Session session = new Session(null) { @Override public void addmsg(Message message) {} };
++                Player model = new Player(session, 29990);
++                model.level = 100;
++                for (int tier = 6; tier <= 10; tier++) {
++                    Player seller = LoiDai.createOpponent(model, 30010 + tier - 6);
++                    seller.name = "Mề đay +" + tier;
++                    seller.my_store_name = "Mề đay +" + tier + " • 4 phái";
++                    seller.map = market;
++                    seller.x = (short) (150 + (tier - 6) * 65);
++                    seller.y = 200;
++                    seller.my_store = new ArrayList<>();
++                    TIERS.put(seller.id, tier);
++                    market.players.add(seller);
++                }
++                System.out.println("HSO_MEDAL_MERCHANTS map=" + market.map_id + " count=5");
++            } catch (IOException error) {
++                throw new IllegalStateException("Cannot initialize medal merchants", error);
++            }
++            return;
++        }
++        throw new IllegalStateException("Missing Khu Mua Bán map");
++    }
++
++    private static Item3 medal(int clazz, int tier) {
++        ItemSellCoin offer = ItemSellCoin.entry.stream().filter(row -> row.id == MEDALS[clazz]).findFirst().orElseThrow();
++        Item3 item = offer.createItem();
++        item.clazz = (byte) clazz;
++        item.tier = (byte) tier;
++        item.color = 5;
++        item.level = 1;
++        item.op = new ArrayList<>(List.of(new Option(Item3.getClassDamageOptionId((byte) clazz), 800),
++                new Option(7, 1000), new Option(8 + new int[]{1,3,0,2}[clazz], 1500),
++                new Option(27, 1500), new Option(28, 1000), new Option(37, 2), new Option(33, 1000)));
++        return item;
++    }
++
++    public static Item3 lotteryMedal(int clazz) {
++        Item3 item = medal(clazz, 15);
++        item.op = new ArrayList<>(List.of(new Option(Item3.getClassDamageOptionId((byte) clazz), 599),
++                new Option(27, 1000), new Option(29, 500), new Option(37, 3), new Option(38, 3),
++                new Option(80, 50), new Option(33, 500), new Option(81, 5), new Option(82, 50),
++                new Option(87, 50), new Option(88, 3), new Option(8 + new int[]{1,3,0,2}[clazz], 900),
++                new Option(76, 500), new Option(77, 5)));
++        return item;
++    }
++
++    public static boolean view(Session connection, Player seller) throws IOException {
++        Integer tier = seller == null ? null : TIERS.get(seller.id);
++        if (tier == null) return false;
++        Message packet = new Message(23);
++        packet.writer().writeUTF(seller.my_store_name);
++        packet.writer().writeByte(17);
++        packet.writer().writeShort(4);
++        for (int clazz = 0; clazz < 4; clazz++) {
++            Item3 item = medal(clazz, tier);
++            packet.writer().writeByte(3);
++            packet.writer().writeShort(item.id);
++            packet.writer().writeUTF(item.name);
++            packet.writer().writeByte(item.clazz);
++            packet.writer().writeByte(item.type);
++            packet.writer().writeShort(item.icon);
++            packet.writer().writeByte(item.tier);
++            packet.writer().writeShort(item.level);
++            packet.writer().writeByte(item.color);
++            packet.writer().writeByte(item.op.size() + 1);
++            for (Option option : item.op) {
++                packet.writer().writeByte(option.id);
++                packet.writer().writeInt(option.getParam(item.tier));
++            }
++            packet.writer().writeByte(70);
++            packet.writer().writeInt(price(tier));
++            packet.writer().writeByte(0);
++        }
++        packet.writer().writeShort(seller.id);
++        connection.addmsg(packet);
++        packet.cleanup();
++        return true;
++    }
++
++    private static int price(int tier) { return (tier - 5) * 1000; }
++
++    public static boolean buy(Session connection, Player seller, short itemId, byte category) throws IOException {
++        Integer tier = seller == null ? null : TIERS.get(seller.id);
++        if (tier == null) return false;
++        if (seller.map != connection.p.map || category != 3) return true;
++        int clazz = -1;
++        for (int i = 0; i < MEDALS.length; i++) if (MEDALS[i] == itemId) clazz = i;
++        if (clazz < 0) return true;
++        synchronized (connection.p) {
++            if (connection.p.item.get_bag_able() < 1) {
++                Service.send_notice_box(connection, "Hành trang đầy.");
++            } else if (connection.p.get_vang() < price(tier)) {
++                Service.send_notice_box(connection, "Bạn cần " + price(tier) + " vàng.");
++            } else if (connection.p.item.add_item_bag3(medal(clazz, tier))) {
++                connection.p.update_vang(-price(tier));
++                connection.p.item.char_inventory(3);
++                connection.p.item.char_inventory(5);
++                Service.send_notice_box(connection, "Đã mua mề đay +" + tier + ".");
++            }
++        }
++        return true;
++    }
++}
+--- /dev/null
++++ b/src/main/java/core/OfflineTools.java
+@@ -0,0 +1,207 @@
++package core;
++
++import java.io.ByteArrayOutputStream;
++import java.io.File;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.net.HttpURLConnection;
++import java.net.InetAddress;
++import java.net.ServerSocket;
++import java.net.Socket;
++import java.net.URL;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++import java.util.HashMap;
++import java.util.Map;
++import java.util.UUID;
++import org.json.simple.JSONObject;
++import org.json.simple.JSONValue;
++
++/** Local-only backup and release UI used by the three platform launchers. */
++public final class OfflineTools {
++    public static final int VERSION = 23;
++    private static final int PORT = Manager.gI().server_port == 19140 ? 19141 : 19140;
++    public static final String ADDRESS = "http://127.0.0.1:" + PORT + "/";
++    private static final String RELEASE = "https://github.com/zuzongdnt/hso-offline-tools/releases/latest/download/update.json";
++    private static final String TOKEN = UUID.randomUUID().toString();
++    private static volatile String latest = "{}";
++    private static boolean started;
++
++    private OfflineTools() {}
++    private static Path root() { return new File(System.getProperty("hso.root", ".")).toPath(); }
++
++    public static void restorePending() throws Exception {
++        Path pending = root().resolve("import-pending.hsosave");
++        if (!Files.isRegularFile(pending)) return;
++        Path backups = root().resolve("backups");
++        Files.createDirectories(backups);
++        String stamp = Long.toString(System.currentTimeMillis());
++        try {
++            if (Files.size(pending) > SaveTransfer.LIMIT) throw new IOException("File vượt quá 32 MB.");
++            String text = new String(Files.readAllBytes(pending), StandardCharsets.UTF_8);
++            SaveTransfer.validate(text);
++            Files.write(backups.resolve("before-import-" + stamp + ".hsosave"),
++                    SQL.gI().exportSave().getBytes(StandardCharsets.UTF_8));
++            SQL.gI().importSave(text);
++            Files.move(pending, backups.resolve("imported-" + stamp + ".hsosave"));
++            Files.write(root().resolve("restore-result.txt"), "Khôi phục dữ liệu thành công.".getBytes(StandardCharsets.UTF_8));
++            System.out.println("HSO_SAVE_IMPORTED " + stamp);
++        } catch (Exception error) {
++            Files.move(pending, backups.resolve("rejected-" + stamp + ".hsosave"));
++            Files.write(root().resolve("restore-result.txt"), ("Khôi phục chưa thành công. " + error.getMessage()).getBytes(StandardCharsets.UTF_8));
++            error.printStackTrace();
++        }
++    }
++
++    public static synchronized void start() {
++        if (started) return;
++        started = true;
++        Thread listener = new Thread(() -> {
++            try (ServerSocket server = new ServerSocket(PORT, 8, InetAddress.getByName("127.0.0.1"))) {
++                System.out.println("HSO_TOOLS_READY " + ADDRESS);
++                while (!server.isClosed()) {
++                    try (Socket socket = server.accept()) {
++                        socket.setSoTimeout(15000);
++                        handle(socket);
++                    } catch (Exception error) {
++                        System.err.println("Offline tools request: " + error.getMessage());
++                    }
++                }
++            } catch (IOException error) {
++                error.printStackTrace();
++            }
++        }, "HSO-Data-Tools");
++        listener.setDaemon(true);
++        listener.start();
++        Thread updates = new Thread(OfflineTools::refreshRelease, "HSO-Update-Check");
++        updates.setDaemon(true);
++        updates.start();
++    }
++
++    private static byte[] read(InputStream input, int count) throws IOException {
++        if (count < 0 || count > SaveTransfer.LIMIT) throw new IOException("File vượt quá 32 MB.");
++        byte[] bytes = new byte[count];
++        int total = 0;
++        while (total < count) {
++            int size = input.read(bytes, total, count - total);
++            if (size < 0) throw new IOException("File chưa tải đủ.");
++            total += size;
++        }
++        return bytes;
++    }
++
++    private static String line(InputStream input) throws IOException {
++        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
++        int value;
++        while ((value = input.read()) != -1 && value != '\n') {
++            if (bytes.size() >= 8192) throw new IOException("Header quá lớn.");
++            if (value != '\r') bytes.write(value);
++        }
++        return new String(bytes.toByteArray(), StandardCharsets.US_ASCII);
++    }
++
++    private static void handle(Socket socket) throws Exception {
++        InputStream input = socket.getInputStream();
++        String[] request = line(input).split(" ");
++        if (request.length != 3) return;
++        Map<String, String> headers = new HashMap<>();
++        String header;
++        int size = 0;
++        while (!(header = line(input)).isEmpty()) {
++            size += header.length();
++            if (size > 16384) throw new IOException("Header quá lớn.");
++            int colon = header.indexOf(':');
++            if (colon <= 0) throw new IOException("Header không hợp lệ.");
++            headers.put(header.substring(0, colon).toLowerCase(java.util.Locale.ROOT), header.substring(colon + 1).trim());
++        }
++        String path = request[1];
++        if (!("127.0.0.1:" + PORT).equals(headers.get("host"))) {
++            respond(socket, 403, "text/plain", "Địa chỉ không hợp lệ.");
++            return;
++        }
++        try {
++            if (request[0].equals("GET") && path.equals("/")) {
++                String html = new String(Util.loadfile("data/offline-tools.html"), StandardCharsets.UTF_8);
++                Path result = root().resolve("restore-result.txt");
++                String message = Files.isRegularFile(result) ? new String(Files.readAllBytes(result), StandardCharsets.UTF_8) : "";
++                html = html.replace("__RESTORE_RESULT__", message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"));
++                respond(socket, 200, "text/html; charset=utf-8", html.replace("__TOKEN__", TOKEN));
++            } else if (request[0].equals("GET") && path.equals("/export?token=" + TOKEN)) {
++                String save;
++                synchronized (SaveData.class) {
++                    SaveData.process();
++                    save = SQL.gI().exportSave();
++                }
++                respond(socket, 200, "application/octet-stream\r\nContent-Disposition: attachment; filename=HSO-"
++                        + System.currentTimeMillis() + ".hsosave", save);
++            } else if (request[0].equals("POST") && path.equals("/import") && TOKEN.equals(headers.get("x-hso-token"))
++                    && ADDRESS.substring(0, ADDRESS.length() - 1).equals(headers.get("origin"))) {
++                int count = Integer.parseInt(headers.getOrDefault("content-length", "-1"));
++                String text = new String(read(input, count), StandardCharsets.UTF_8);
++                SaveTransfer.validate(text);
++                Path pending = root().resolve("import-pending.hsosave");
++                if (Files.exists(pending)) throw new IOException("Đã có file chờ khôi phục. Hãy đóng và mở lại game.");
++                Path partial = root().resolve("import-upload.tmp");
++                Files.write(partial, text.getBytes(StandardCharsets.UTF_8));
++                Files.move(partial, pending, StandardCopyOption.ATOMIC_MOVE);
++                respond(socket, 200, "text/plain; charset=utf-8", "Đã nhận file. Đóng hẳn và mở lại game để khôi phục. Dữ liệu cũ được tự sao lưu trước khi nhập.");
++            } else if (request[0].equals("GET") && path.equals("/updates?token=" + TOKEN)) {
++                respond(socket, 200, "application/json; charset=utf-8", latest);
++            } else if (request[0].equals("POST") && path.equals("/install-pc") && TOKEN.equals(headers.get("x-hso-token"))
++                    && ADDRESS.substring(0, ADDRESS.length() - 1).equals(headers.get("origin"))
++                    && System.getProperty("os.name", "").startsWith("Windows")) {
++                Path game = root().toAbsolutePath().normalize().getParent();
++                Path updater = game.resolve("CAP_NHAT_TU_DONG.ps1");
++                if (!Files.isRegularFile(updater)) throw new IOException("Thiếu công cụ cập nhật PC.");
++                new ProcessBuilder("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
++                        "-File", updater.toString(), "-GameRoot", game.toString()).start();
++                respond(socket, 200, "text/plain; charset=utf-8", "Đã mở trình cập nhật PC. Xác nhận trong cửa sổ HSO Offline.");
++            } else {
++                respond(socket, 403, "text/plain; charset=utf-8", "Yêu cầu không hợp lệ. Mở lại trang Dữ liệu.");
++            }
++        } catch (Exception error) {
++            respond(socket, 400, "text/plain; charset=utf-8", "Chưa thực hiện được. " + error.getMessage());
++        }
++    }
++
++    private static void respond(Socket socket, int status, String type, String text) throws IOException {
++        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
++        String header = "HTTP/1.1 " + status + " Response\r\nContent-Type: " + type
++                + "\r\nContent-Length: " + bytes.length + "\r\nCache-Control: no-store\r\n"
++                + "X-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n";
++        OutputStream output = socket.getOutputStream();
++        output.write(header.getBytes(StandardCharsets.US_ASCII));
++        output.write(bytes);
++        output.flush();
++    }
++
++    private static void refreshRelease() {
++        HttpURLConnection connection = null;
++        try {
++            connection = (HttpURLConnection) new URL(RELEASE).openConnection();
++            connection.setConnectTimeout(5000);
++            connection.setReadTimeout(5000);
++            connection.setRequestProperty("User-Agent", "HSO-Offline/23");
++            try (InputStream input = connection.getInputStream()) {
++                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
++                byte[] buffer = new byte[4096];
++                int count;
++                while ((count = input.read(buffer)) != -1) {
++                    if (bytes.size() + count > 65536) throw new IOException("Release manifest too large");
++                    bytes.write(buffer, 0, count);
++                }
++                Object value = JSONValue.parseWithException(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
++                if (!(value instanceof JSONObject manifest) || !(manifest.get("version") instanceof Number))
++                    throw new IOException("Invalid release manifest");
++                latest = manifest.toJSONString();
++            }
++        } catch (Exception error) {
++            System.out.println("HSO_UPDATE_CHECK " + error.getClass().getSimpleName());
++        } finally {
++            if (connection != null) connection.disconnect();
++        }
++    }
++}
+--- a/src/main/java/core/SaveData.java
++++ b/src/main/java/core/SaveData.java
+@@ -141,6 +141,7 @@
+                         // for (int i1 = 0; i1 < ServerManager.gI().t1.list_p.size(); i1++) {
+                         ps.clearParameters();
+                         Player p0 = map0.players.get(i1);
++                        if (p0.is_nhanban) continue;
+                         // Player p0 = ServerManager.gI().t1.list_p.get(i1);
+                         //
+                         // When training disciple, save master's original stats to DB
+--- /dev/null
++++ b/src/main/java/core/SaveTransfer.java
+@@ -0,0 +1,118 @@
++package core;
++
++import java.io.IOException;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.sql.Connection;
++import java.sql.PreparedStatement;
++import java.sql.ResultSet;
++import java.sql.Statement;
++import java.util.Arrays;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import java.util.Set;
++import org.json.simple.JSONArray;
++import org.json.simple.JSONObject;
++import org.json.simple.JSONValue;
++
++/** Portable character saves. World templates always come from the installed game. */
++public final class SaveTransfer {
++    public static final int LIMIT = 32 * 1024 * 1024;
++    private static final Map<String, String[]> TABLES = new LinkedHashMap<>();
++    static {
++        TABLES.put("account", columns("id user pass char status lock coin phone ip tiennap pass2 tongnap checkmocnap"));
++        TABLES.put("clan", columns("id name name_short mems level exp slogan rule notice vang kimcuong max_mem icon item"));
++        TABLES.put("wedding", columns("id name item"));
++        TABLES.put("player", columns("id name body clazz maxbag diemdanh typeexp level exp site dquest rms_save nvtt tinhtu_material friend eff enemies skill item3 item4 item5 item7 itembox3 itembox4 itembox5 itembox7 itemwear pet vang kimcuong tiemnang kynang point1 point2 point3 point4 giftcode date medal_create_material point_active chucphuc hieuchien id_name chuyensinh tutien pointarena dropnlmd detu"));
++    }
++
++    private SaveTransfer() {}
++    private static String[] columns(String text) { return text.split(" "); }
++    private static String quoted(String[] names) { return "`" + String.join("`,`", names) + "`"; }
++    private static String digest(String data) throws Exception {
++        byte[] hash = MessageDigest.getInstance("SHA-256").digest(data.getBytes(StandardCharsets.UTF_8));
++        StringBuilder text = new StringBuilder();
++        for (byte value : hash) text.append(Integer.toHexString((value & 255) | 256).substring(1));
++        return text.toString();
++    }
++
++    @SuppressWarnings("unchecked")
++    public static String capture(Connection connection) throws Exception {
++        JSONObject tables = new JSONObject();
++        for (var entry : TABLES.entrySet()) {
++            JSONArray rows = new JSONArray();
++            String filter = entry.getKey().equals("player") ? " WHERE id >= 0" : "";
++            try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(
++                    "SELECT " + quoted(entry.getValue()) + " FROM `" + entry.getKey() + "`" + filter + " ORDER BY id")) {
++                while (result.next()) {
++                    JSONArray row = new JSONArray();
++                    // Strings preserve 64-bit currency exactly on every platform.
++                    for (String column : entry.getValue()) row.add(result.getString(column));
++                    rows.add(row);
++                }
++            }
++            tables.put(entry.getKey(), rows);
++        }
++        String payload = tables.toJSONString();
++        JSONObject envelope = new JSONObject();
++        envelope.put("format", "hso-save-v1");
++        envelope.put("created", System.currentTimeMillis());
++        envelope.put("payload", payload);
++        envelope.put("sha256", digest(payload));
++        return envelope.toJSONString();
++    }
++
++    public static JSONObject validate(String text) throws Exception {
++        if (text.getBytes(StandardCharsets.UTF_8).length > LIMIT) throw new IOException("File sao lưu quá lớn.");
++        Object parsed = JSONValue.parseWithException(text);
++        if (!(parsed instanceof JSONObject envelope) || !"hso-save-v1".equals(envelope.get("format"))
++                || !(envelope.get("payload") instanceof String payload)
++                || !digest(payload).equals(envelope.get("sha256")))
++            throw new IOException("File sao lưu sai định dạng hoặc bị hỏng.");
++        Object data = JSONValue.parseWithException(payload);
++        if (!(data instanceof JSONObject tables) || !tables.keySet().equals(TABLES.keySet()))
++            throw new IOException("File thiếu bảng dữ liệu.");
++        for (var entry : TABLES.entrySet()) {
++            if (!(tables.get(entry.getKey()) instanceof JSONArray rows)) throw new IOException("Bảng dữ liệu không hợp lệ.");
++            Set<Long> ids = new HashSet<>();
++            for (Object value : rows) {
++                if (!(value instanceof JSONArray row) || row.size() != entry.getValue().length)
++                    throw new IOException("Phiên bản dữ liệu chưa tương thích.");
++                for (Object cell : row) if (cell != null && !(cell instanceof String))
++                    throw new IOException("Giá trị sao lưu không hợp lệ.");
++                long id = Long.parseLong((String) row.get(0));
++                if (id < 0 || !ids.add(id)) throw new IOException("ID dữ liệu không hợp lệ.");
++                if (entry.getKey().equals("player")) {
++                    int level = Integer.parseInt((String) row.get(7));
++                    int clazz = Integer.parseInt((String) row.get(3));
++                    if (level < 1 || level > 32767 || clazz < 0 || clazz > 3)
++                        throw new IOException("Nhân vật không hợp lệ.");
++                }
++            }
++        }
++        return tables;
++    }
++
++    public static void replace(Connection connection, String text) throws Exception {
++        JSONObject tables = validate(text);
++        // The caller owns a real transaction and invokes this before loading any players.
++        for (var entry : TABLES.entrySet()) {
++            String table = entry.getKey();
++            try (Statement statement = connection.createStatement()) {
++                statement.executeUpdate("DELETE FROM `" + table + "`" + (table.equals("player") ? " WHERE id >= 0" : ""));
++            }
++            String[] markers = new String[entry.getValue().length];
++            Arrays.fill(markers, "?");
++            String sql = "INSERT INTO `" + table + "` (" + quoted(entry.getValue()) + ") VALUES ("
++                    + String.join(",", markers) + ")";
++            try (PreparedStatement statement = connection.prepareStatement(sql)) {
++                for (Object value : (JSONArray) tables.get(table)) {
++                    JSONArray row = (JSONArray) value;
++                    for (int i = 0; i < row.size(); i++) statement.setString(i + 1, (String) row.get(i));
++                    statement.executeUpdate();
++                }
++            }
++        }
++    }
++}
+--- a/src/main/java/core/ServerManager.java
++++ b/src/main/java/core/ServerManager.java
+@@ -46,6 +46,8 @@
+ 
+     public void init() {
+         Manager.gI().init();
++        OfflineMarket.populate();
++        OfflineTools.start();
+         Mob_in_map.create_boss();
+         server_update_right_time();
+         this.running = true;
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -301,6 +301,7 @@
+     }
+ 
+     public static short get_id_phiphong(Player p) {
++        if (template.OfflineSkins.dreamOutfit(p)) return -1;
+         short result = -1;
+         if (p.item.wear[15] != null) {
+             result = (short) (p.item.wear[15].part + 41);
+@@ -348,6 +349,7 @@
+     }
+ 
+     public static short get_id_mat_na(Player p) {
++        if (template.OfflineSkins.dreamOutfit(p)) return -1;
+         short result = -1;
+         if (p.item.wear[13] != null) {
+             result = (short) (Byte.toUnsignedInt(p.item.wear[13].part) + 41);
+--- a/src/main/java/core/SQL.java
++++ b/src/main/java/core/SQL.java
+@@ -55,6 +55,34 @@
+         return dataSource.getConnection();
+     }
+ 
++    public String exportSave() throws Exception {
++        try (Connection connection = getConnection()) {
++            connection.setAutoCommit(false);
++            try {
++                String text = SaveTransfer.capture(connection);
++                connection.commit();
++                return text;
++            } catch (Exception error) {
++                connection.rollback();
++                throw error;
++            }
++        }
++    }
++
++    public void importSave(String text) throws Exception {
++        SaveTransfer.validate(text);
++        try (Connection connection = getConnection()) {
++            connection.setAutoCommit(false);
++            try {
++                SaveTransfer.replace(connection, text);
++                connection.commit();
++            } catch (Exception error) {
++                connection.rollback();
++                throw error;
++            }
++        }
++    }
++
+     public void close() {
+         if (SQL.is_connected) {
+             if (dataSource != null) {
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -94,11 +94,15 @@
+         arena.start_map();
+     }
+ 
+-    private static Player createOpponent(Player player) throws IOException {
++    public static Player createOpponent(Player player) throws IOException {
++        return createOpponent(player, player.id == 30000 ? 29999 : 30000);
++    }
++
++    public static Player createOpponent(Player player, int id) throws IOException {
+         Session session = new Session(null) {
+             @Override public void addmsg(Message message) {}
+         };
+-        Player bot = new Player(session, player.id == 30000 ? 29999 : 30000);
++        Player bot = new Player(session, id);
+         session.p = bot;
+         bot.name = NAMES[Util.random(NAMES.length)] + " [Bot]";
+         bot.level = (short) (player.level / 10 * 10 + Util.random(10));
+@@ -137,6 +141,8 @@
+         if (bot.clazz == 0) bot.point1 += budget * 3 / 5;
+         else if (bot.clazz == 2 || bot.clazz == 3) bot.point4 += budget * 3 / 5;
+         else bot.point1 += budget * 3 / 5;
++        bot.point3 += 500;
++        bot.point4 += 500;
+         bot.load_skill();
+         int skillBudget = template.Level.get_kynang_by_level(bot.level);
+         for (int skill : SKILLS) {
+@@ -163,6 +169,10 @@
+         equip(bot, 13, 4736 + clazz % 2);
+         equip(bot, 14, 4840 + clazz % 3);
+         equip(bot, 16, clazz % 2 == 0 ? 4846 : 4847);
++        bot.item.wear[13].op.add(new Option(36, 2000));
++        bot.item.wear[13].op.add(new Option(33, 2000));
++        bot.item.wear[13].op.add(new Option(34, 4000));
++        bot.item.wear[13].op.add(new Option(35, 4000));
+         template.RankBadge.setRank(bot, 2 + clazz);
+         bot.fashion = template.Part_fashion.get_part(bot);
+         bot.hp = bot.body.get_max_hp();
+--- a/src/main/java/event_daily/MoLy.java
++++ b/src/main/java/event_daily/MoLy.java
+@@ -9,9 +9,9 @@
+ 
+ public class MoLy {
+ 
+-    public static short[] item_mo_ly = new short[]{2939, 4640, 4639, 4641, 4638, 14};
+-    public static byte[] item_mo_ly_type = new byte[]{3, 3, 3, 3, 3, 7};
+-    public static byte[] item_mo_ly_percent = new byte[]{15, 5, 5, 5, 5, 10};
++    public static short[] item_mo_ly = new short[]{2939, 4640, 4639, 4641, 4638, 14, 4587, 4589, 4588, 4590};
++    public static byte[] item_mo_ly_type = new byte[]{3, 3, 3, 3, 3, 7, 3, 3, 3, 3};
++    public static byte[] item_mo_ly_percent = new byte[]{15, 5, 5, 5, 5, 10, 5, 5, 5, 5};
+ 
+     public static void show_table_to_choose_item(Player p) throws IOException {
+         p.id_select_mo_ly = -1;
+@@ -22,6 +22,23 @@
+             m.writer().writeByte(item_mo_ly_type[i]);
+             switch (item_mo_ly_type[i]) {
+                 case 3: {
++                    if (i >= 6) {
++                        template.Item3 prize = core.OfflineMarket.lotteryMedal(i - 6);
++                        m.writer().writeUTF(prize.name + " +15 • Bỏng lửa");
++                        m.writer().writeByte(prize.clazz);
++                        m.writer().writeShort(prize.id);
++                        m.writer().writeByte(prize.type);
++                        m.writer().writeShort(prize.icon);
++                        m.writer().writeByte(prize.tier);
++                        m.writer().writeShort(prize.level);
++                        m.writer().writeByte(prize.color);
++                        m.writer().writeByte(prize.op.size());
++                        for (template.Option option : prize.op) {
++                            m.writer().writeByte(option.id);
++                            m.writer().writeInt(option.getParam(prize.tier));
++                        }
++                        break;
++                    }
+                     ItemTemplate3 temp = ItemTemplate3.item.get(item_mo_ly[i]);
+                     m.writer().writeUTF(temp.getName());
+                     m.writer().writeByte(temp.getClazz());
+@@ -55,6 +72,11 @@
+         byte idSelectedItem = m2.reader().readByte();
+         // System.out.println(step);
+         // System.out.println(idSelectedItem);
++        if (idSelectedItem < 0 || idSelectedItem >= item_mo_ly.length) return;
++        if (p.item.get_bag_able() < 1) {
++            Service.send_notice_box(p.conn, "Hành trang đầy.");
++            return;
++        }
+         switch (step) {
+             case 1: {
+                 if (p.item.total_item_by_id(4, 52) < 1) {
+@@ -74,7 +96,8 @@
+                 break;
+             }
+             case 2: {
+-                if (p.id_select_mo_ly != -1) {
++                if (p.id_select_mo_ly != -1 && p.id_select_mo_ly == idSelectedItem
++                        && p.item.total_item_by_id(4, 52) > 0) {
+                     p.item.remove(4, 52, 1);
+                     if (MoLy.item_mo_ly_percent[p.id_select_mo_ly] > Util.random(250)) {
+                         Message m = new Message(-91);
+@@ -84,7 +107,12 @@
+                         m.writer().writeByte(idSelectedItem);
+                         p.conn.addmsg(m);
+                         m.cleanup();
+-                        Service.open_box_notice_item(p, "Xin chúc mừng",
++                        if (p.id_select_mo_ly >= 6) {
++                            p.item.add_item_bag3(core.OfflineMarket.lotteryMedal(p.id_select_mo_ly - 6));
++                            p.item.char_inventory(3);
++                            p.item.char_inventory(4);
++                            Service.send_notice_box(p.conn, "Nhận được mề đay +15 có Bỏng lửa!");
++                        } else Service.open_box_notice_item(p, "Xin chúc mừng",
+                                 new short[]{-1, MoLy.item_mo_ly[p.id_select_mo_ly], (short) Util.random(6)},
+                                 new short[]{(short) Util.random(50, 200), 1, (short) Util.random(1, 5)},
+                                 new short[]{4, MoLy.item_mo_ly_type[p.id_select_mo_ly], 4});
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -406,6 +406,7 @@
+             expireCampfire();
+             for (int i1 = 0; i1 < players.size(); i1++) {
+                 Player p = players.get(i1);
++                if (core.OfflineMarket.isMerchant(p)) continue;
+                 if (this.map_id == 50) { // pet_manager
+                     long now_time = System.currentTimeMillis();
+                     for (Pet temp : p.mypet) {
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -2534,7 +2534,7 @@
+         // bong lua: gay bong lua cho ke thu khi tan cong (mat hp/s theo % trong thoi gian ton tai)
+         if (dame > 0 && p0.hp > 0) {
+             int blParam = p.body.get_equipment_effect(76);
+-            if (blParam > 0 && (blParam >= 100 || blParam > Util.random(10000))) {
++            if (blParam > 0 && TinhTu.rolls(blParam)) {
+                 int dur = p.body.get_effect_duration(77, 5000);
+                 p0.add_eff(-202, 5, dur);
+                 p0.show_eff_p(1, 1000);
+@@ -3034,7 +3034,7 @@
+             }
+             // bong lua: 76 (100% khi co opt 100%)
+             int blParam = p.body.get_equipment_effect(76);
+-            if (blParam > 0 && (blParam >= 100 || blParam > Util.random(10000))) {
++            if (blParam > 0 && TinhTu.rolls(blParam)) {
+                 p.show_eff_p(1, 1000);
+             }
+             // bong lanh: 78
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -165,7 +165,7 @@
+         return !OfflineSkins.removed(id) && (OfflineSkins.has(id) || !MISSING_VISUALS.contains((int) id));
+     }
+ 
+-    private static boolean cosmetic(int type) {
++    static boolean cosmetic(int type) {
+         return type == 15 || (type >= 21 && type <= 27) || type == OfflineSkins.MOUNT_ITEM
+                 || type == EquippedEffects.LANTERN_TYPE || type == EquippedEffects.AURA_TYPE;
+     }
+@@ -256,7 +256,11 @@
+         for (short id = HeroArmor.FIRST_MATERIAL; id < HeroArmor.FIRST_MATERIAL + 4 && id < ItemTemplate7.item.size(); id++)
+             materials.add(id);
+         // Native medal materials: level 1 occupies IDs 46 through 145.
+-        for (short id = 46; id <= 145; id++) materials.add(id);
++        for (short id = 46; id <= 145; id++) {
++            materials.add(id);
++            ItemTemplate7.item.get(id).setPricetype((byte) 0);
++            ItemTemplate7.item.get(id).setPrice(1);
++        }
+         for (short id : LEVEL5_GEMS) {
+             materials.add(id);
+             ItemTemplate7 gem = ItemTemplate7.item.get(id);
+@@ -347,6 +351,18 @@
+                 result.add(new Option(((Number) pair.get(0)).intValue(), ((Number) pair.get(1)).intValue()));
+             }
+         }
++        if (result.isEmpty() && cosmetic(template.getType())) {
++            switch (template.getType()) {
++                case 23: case 25: result.add(new Option(29, 100)); break;
++                case 21: case 30:
++                    for (int id = 23; id <= 26; id++) result.add(new Option(id, 4));
++                    break;
++                default:
++                    for (int id = 7; id <= 11; id++) result.add(new Option(id, 500));
++                    result.add(new Option(27, 100));
++                    break;
++            }
++        }
+         return result;
+     }
+ }
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -115,7 +115,7 @@
+             mount.setId(id);
+             mount.setIcon(number(row, "icon").shortValue());
+             mount.setName((String) row.get("name"));
+-            mount.setContent("Thú cưỡi vĩnh viễn.");
++            mount.setContent("Thú cưỡi vĩnh viễn. Khi cưỡi: +4 sức mạnh, khéo léo, thể lực, tinh thần; +5% máu.");
+             mount.setType((byte) 44);
+             mount.setValue((short) 1);
+             mount.setPrice(1_000_000);
+@@ -127,6 +127,12 @@
+         }
+     }
+ 
++    public static int mountParam(Player player, int id) {
++        if (player.type_use_mount < 0 || player.id_horse < 0 || equippedMount(player) != null) return 0;
++        if (id >= 23 && id <= 26) return 4;
++        return id == 27 ? 500 : 0;
++    }
++
+     public static Mount mount(short id) {
+         return mounts.get(id);
+     }
+@@ -143,6 +149,10 @@
+     public static void refreshSavedItem(Item3 item) {
+         if (VERIFIED_OPTIONS.contains((int)item.id)) {
+             item.op.removeIf(option -> Byte.toUnsignedInt(option.id) < 58 || Byte.toUnsignedInt(option.id) > 60);
++            for (Option option : ItemSellCoin.cosmeticOptions(ItemTemplate3.item.get(item.id)))
++                item.op.add(new Option(option.id, option.getParam(0)));
++        }
++        if (ItemSellCoin.cosmetic(item.type) && item.op.stream().noneMatch(op -> op.id < 58 || op.id > 60)) {
+             for (Option option : ItemSellCoin.cosmeticOptions(ItemTemplate3.item.get(item.id)))
+                 item.op.add(new Option(option.id, option.getParam(0)));
+         }
+@@ -174,6 +184,11 @@
+             item.op.removeIf(saved -> saved.id == current.id);
+             item.op.add(new Option(optionId, current.getParam(0)));
+         }
++    }
++
++    public static boolean dreamOutfit(Player player) {
++        Item3 outfit = player.item.wear[11];
++        return outfit != null && (outfit.id == 4807 || outfit.id == 4808);
+     }
+ 
+     public static short bodyEffect(Player player) {

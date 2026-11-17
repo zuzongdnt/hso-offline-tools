@@ -1,0 +1,120 @@
+--- a/src/main/java/client/Pet.java
++++ b/src/main/java/client/Pet.java
+@@ -13,7 +13,7 @@
+     public static final byte TYPE_DAI_BANG = 3;
+     public static final short ID_DAI_BANG = 3269;
+     public static final short ID_CAT = 4831;
+-    public static final short ID_LAN = 4865;
++    public static final short ID_LAN = 4867;
+     public static final int EAGLE_GOLD_MIN = 100;
+     public static final int EAGLE_GOLD_MAX = 3000;
+ 
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -439,6 +439,7 @@
+                 JSONArray jsar2 = (JSONArray) JSONValue.parse(jsar.get(i).toString());
+                 Item47 temp = new Item47();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                if (temp.id == OfflineSkins.RETIRED_MOUNT) continue;
+                 temp.quantity = Short.parseShort(jsar2.get(1).toString());
+                 temp.category = 4;
+                 if (temp.quantity > 0) {
+@@ -471,6 +472,7 @@
+                 JSONArray jsar2 = (JSONArray) JSONValue.parse(jsar.get(i).toString());
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                temp.id = OfflineSkins.migrateSavedId(temp.id, Byte.parseByte(jsar2.get(2).toString()));
+                 if (OfflineSkins.removed(temp.id)) continue;
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+                 temp.type = Byte.parseByte(jsar2.get(2).toString());
+@@ -514,6 +516,7 @@
+                 }
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                temp.id = OfflineSkins.migrateSavedId(temp.id, Byte.parseByte(jsar2.get(2).toString()));
+                 if (OfflineSkins.removed(temp.id)) continue;
+                 temp.name = ItemTemplate3.item.get(temp.id).getName() + " [Khóa]";
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+@@ -564,6 +567,7 @@
+                 }
+                 Item47 temp = new Item47();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                if (temp.id == OfflineSkins.RETIRED_MOUNT) continue;
+                 temp.quantity = Short.parseShort(jsar2.get(1).toString());
+                 temp.category = 4;
+                 if (temp.quantity > 0) {
+@@ -602,6 +606,7 @@
+                 }
+                 Item3 temp = new Item3();
+                 temp.id = Short.parseShort(jsar2.get(0).toString());
++                temp.id = OfflineSkins.migrateSavedId(temp.id, Byte.parseByte(jsar2.get(2).toString()));
+                 if (OfflineSkins.removed(temp.id)) continue;
+                 temp.clazz = Byte.parseByte(jsar2.get(1).toString());
+                 temp.type = Byte.parseByte(jsar2.get(2).toString());
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -2389,6 +2389,8 @@
+         if (!trueDamage) {
+             long resist_dame = (dame * (p0.body.get_resist_dame(type_atk, p.clazz, p0) / 100)) / 500;
+             resist_dame -= (resist_dame * tylene) / 100;
++            int resistancePenetration = Math.min(10_000, p.body.total_item_param(193));
++            resist_dame -= resist_dame * resistancePenetration / 10_000;
+             dame -= resist_dame;
+             if (dame < 0) dame = 1;
+         }
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -29,9 +29,14 @@
+         }
+     }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+-    private static final Set<Integer> REMOVED = Set.of(4849, 4854, 4855, 4858, 4861, 4862);
++    private static final Set<Integer> REMOVED = Set.of(4809, 4811, 4849, 4854, 4855, 4858, 4861, 4862, 4865, 4866);
+     private static final Set<Integer> VERIFIED_OPTIONS = Set.of(4633, 4634, 4707, 4755);
+     public static boolean removed(int id) { return REMOVED.contains(id); }
++    public static final short RETIRED_MOUNT = 335;
++
++    public static short migrateSavedId(short id, byte type) {
++        return id == 4865 && type == 14 ? client.Pet.ID_LAN : id;
++    }
+     public static short nativeHair(Player player) {
+         Item3 hair = player.item.wear[16];
+         if (player.item.wear[11] != null || hair == null || hair.id < 4807 || hair.id > 4813) return -1;
+@@ -77,14 +82,21 @@
+         ItemTemplate3.item.get(4755).setName("Tia sét ma thuật");
+         loadMounts();
+         if (OptionItem.entrys.size() == 191) {
+-            for (String name : new String[]{"Lời nguyền Độc tố", "Lời nguyền Suy kiệt"}) {
+-                OptionItem option = new OptionItem();
+-                option.setName(name);
+-                option.setColor((byte) 4);
+-                option.setIspercent((byte) 0);
+-                OptionItem.entrys.add(option);
+-            }
+-        }
++            addOption("Lời nguyền Độc tố", 4, 0);
++            addOption("Lời nguyền Suy kiệt", 4, 0);
++        }
++        if (OptionItem.entrys.size() == 193) {
++            addOption("Xuyên Kháng", 4, 1);
++            addOption("Quáng Tuyết", 8, 1);
++        }
++    }
++
++    private static void addOption(String name, int color, int percent) {
++        OptionItem option = new OptionItem();
++        option.setName(name);
++        option.setColor((byte) color);
++        option.setIspercent((byte) percent);
++        OptionItem.entrys.add(option);
+     }
+ 
+     private static void loadMounts() throws IOException {
+@@ -137,6 +149,7 @@
+         if (!has(item.id)) return;
+         ItemTemplate3 template = ItemTemplate3.item.get(item.id);
+         item.icon = template.getIcon();
++        if (item.id == 4868) item.part = template.getPart();
+         if (item.id == 4838) {
+             item.type = template.getType();
+             item.part = template.getPart();

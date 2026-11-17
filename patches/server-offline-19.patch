@@ -1,0 +1,56 @@
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -252,10 +252,9 @@
+     }
+ 
+     public static short get_id_hair(Player p) {
+-        if (p.item.wear[11] == null && p.item.wear[16] != null) {
+-            if (p.item.wear[16].id == 4807) return 159;
+-            if (p.item.wear[16].id == 4808) return 160;
+-        }
++        Item3 costume = p.item.wear[11];
++        if (costume != null && costume.id == 4807) return 159;
++        if (costume != null && costume.id == 4808) return 160;
+         short result = -1;
+         if (p.item.wear[11] == null && p.item.wear[16] != null
+                 && template.OfflineSkins.nativeHair(p) < 0) {
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -39,7 +39,7 @@
+     }
+     public static short nativeHair(Player player) {
+         Item3 hair = player.item.wear[16];
+-        if (player.item.wear[11] != null || hair == null || hair.id < 4807 || hair.id > 4813) return -1;
++        if (player.item.wear[11] != null || hair == null || hair.id < 4809 || hair.id > 4813) return -1;
+         return new short[]{52, 53, 54, 55, 66, 67, 69}[hair.id - 4807];
+     }
+     private static JSONArray catalog = new JSONArray();
+@@ -150,6 +150,10 @@
+         ItemTemplate3 template = ItemTemplate3.item.get(item.id);
+         item.icon = template.getIcon();
+         if (item.id == 4868) item.part = template.getPart();
++        if (item.id == 4807 || item.id == 4808) {
++            item.type = template.getType();
++            item.part = template.getPart();
++        }
+         if (item.id == 4838) {
+             item.type = template.getType();
+             item.part = template.getPart();
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -639,6 +639,15 @@
+                 item.box3[i] = temp;
+             }
+             jsar.clear();
++            Item3 oldDreamOutfit = item.wear[16];
++            if (oldDreamOutfit != null && (oldDreamOutfit.id == 4807 || oldDreamOutfit.id == 4808)) {
++                if (item.wear[11] == null) {
++                    item.wear[11] = oldDreamOutfit;
++                    item.wear[16] = null;
++                } else if (item.add_item_bag3(oldDreamOutfit)) {
++                    item.wear[16] = null;
++                }
++            }
+             if (item.wear[17] != null && item.wear[17].id == 4838) {
+                 Item3 aura = item.wear[17];
+                 int slot = template.EquippedEffects.AURA_SLOT;

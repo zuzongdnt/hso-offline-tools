@@ -1,0 +1,13 @@
+[
+  {
+    "name":"com.google.common.jimfs.SystemJimfsFileSystemProvider",
+    "methods":[{"name":"removeFileSystemRunnable","parameterTypes":["java.net.URI"]}]
+  },
+  {"name":"com.sun.rowset.providers.RIOptimisticProvider","allDeclaredConstructors":true},
+  {"name":"java.sql.Types","allPublicFields":true},
+  {"name":"com.sun.rowset.RowSetFactoryImpl","allDeclaredConstructors":true},
+  {"name":"io.roastedroot.sqlite4j.JDBC","allDeclaredConstructors":true},
+  {"name":"java.sql.Connection","allPublicMethods":true},
+  {"name":"java.sql.Statement","allPublicMethods":true},
+  {"name":"java.sql.PreparedStatement","allPublicMethods":true}
+]

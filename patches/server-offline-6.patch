@@ -1,0 +1,512 @@
+--- a/src/main/java/ai/BossTG.java
++++ b/src/main/java/ai/BossTG.java
+@@ -45,6 +45,11 @@
+ 		p = new Player(new Session(new Socket()), -1);
+                 p.setup();
+ 		p.set_in4();
++        if (p.item.wear[11] == null) {
++            p.item.wear[11] = template.ItemSellCoin.entry.stream().filter(offer -> offer.id == 4741)
++                    .findFirst().orElseThrow().createItem();
++        }
++        p.fashion = template.Part_fashion.get_part(p);
+ 		p.x = 558;
+ 		p.y = 708;
+ 		p.typepk = 0;
+--- a/src/main/java/client/Item.java
++++ b/src/main/java/client/Item.java
+@@ -32,7 +32,7 @@
+                 m.writer().writeLong(p.get_vang());
+                 m.writer().writeInt(p.get_ngoc());
+                 m.writer().writeByte(3);
+-                m.writer().writeByte(total_item_by_type(3));
++                m.writer().writeShort(total_item_by_type(3));
+                 for (int i = 0; i < bag3.length; i++) {
+                     Item3 temp = bag3[i];
+                     if (temp != null) {
+@@ -71,7 +71,7 @@
+                 m.writer().writeLong(p.get_vang());
+                 m.writer().writeInt(p.get_ngoc());
+                 m.writer().writeByte(5);
+-                m.writer().writeByte(0); // size item quest
++                m.writer().writeShort(0); // size item quest
+                 p.conn.addmsg(m);
+                 m.cleanup();
+                 break;
+@@ -84,7 +84,7 @@
+                 m.writer().writeLong(p.get_vang());
+                 m.writer().writeInt(p.get_ngoc());
+                 m.writer().writeByte(type);
+-                m.writer().writeByte(total_item_by_type(type));
++                m.writer().writeShort(total_item_by_type(type));
+                 for (int i = 0; i < bag47.size(); i++) {
+                     Item47 temp = bag47.get(i);
+                     if (temp.category == type) {
+@@ -112,7 +112,7 @@
+                 m.writer().writeByte(0);
+                 m.writer().writeByte(3);
+                 m.writer().writeByte(3);
+-                m.writer().writeByte(total_item_by_type_box(3));
++                m.writer().writeShort(total_item_by_type_box(3));
+                 for (int i = 0; i < box3.length; i++) {
+                     Item3 temp = box3[i];
+                     if (temp != null) {
+@@ -149,7 +149,7 @@
+                 m.writer().writeByte(0);
+                 m.writer().writeByte(5);
+                 m.writer().writeByte(5);
+-                m.writer().writeByte(0); // size item quest
++                m.writer().writeShort(0); // size item quest
+                 p.conn.addmsg(m);
+                 m.cleanup();
+                 break;
+@@ -161,7 +161,7 @@
+                 m.writer().writeByte(0);
+                 m.writer().writeByte(type);
+                 m.writer().writeByte(type);
+-                m.writer().writeByte(total_item_by_type_box(type));
++                m.writer().writeShort(total_item_by_type_box(type));
+                 for (int i = 0; i < box47.size(); i++) {
+                     Item47 temp = box47.get(i);
+                     if (temp.category == type) {
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -173,7 +173,7 @@
+     }
+     public long[] time_delay_skill;
+     public Body body;
+-    public byte maxbag;
++    public int maxbag;
+     public byte maxbox;
+     public Item item;
+     public List<String> giftcode;
+@@ -399,7 +399,7 @@
+             jsar.clear();
+             // load item
+             body = new Body(this);
+-            maxbag = rs.getByte("maxbag");
++            maxbag = id < 0 ? rs.getInt("maxbag") : 256;
+             maxbox = 42;
+             item = new Item(this);
+             item.bag3 = new Item3[maxbag];
+@@ -1808,7 +1808,7 @@
+             temp3.name = ItemTemplate3.item.get(temp3.id).getName() + " [Khóa]";
+             item.wear[b] = temp3;
+             item.remove(3, index_bag, 1);
+-            if (buffer.id != 3593 && buffer.id != 3599 && buffer.id != 3596) {
++            if (buffer.id != 3593 && buffer.id != 3599) {
+                 if (!item.add_item_bag3(buffer)) {
+                     Service.send_notice_box(conn, "Hành trang và rương đồ đã đầy! Không thể tháo vật phẩm ra túi đồ.");
+                 }
+--- a/src/main/java/core/BXH.java
++++ b/src/main/java/core/BXH.java
+@@ -197,10 +197,11 @@
+     own.pointarena = current.pointarena;
+     own.itemwear = new ArrayList<>();
+     standings.add(0, own);
+-    standings.sort(Comparator.comparingInt((Memin4 row) -> {
++    standings.sort(Comparator.comparing((Memin4 row) -> !row.name.equalsIgnoreCase("zuzong"))
++            .thenComparing(Comparator.comparingInt((Memin4 row) -> {
+         Player live = Map.get_player_by_name(row.name);
+         return live == null ? row.pointarena : live.pointarena;
+-    }).reversed());
++    }).reversed()));
+     m.writer().writeInt(standings.indexOf(own));
+     m.writer().writeByte(Math.min(20, standings.size()));
+     for (Memin4 temp : standings.subList(0, Math.min(20, standings.size()))) {
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -1033,7 +1033,7 @@
+ 						itbag.name = temp.getName();
+ 						itbag.tier = 0;
+ 						//
+-                        itbag.op = TinhTu.baseOptions(temp, color_);
++                        itbag.op = TinhTu.options(temp, color_, Util.random(temp.getClazz() == 4 ? 8 : 2));
+                         if (color_ >= 3) {
+                             itbag.op.add(new Option(129, 10_000));
+                             itbag.op.add(new Option(130, Util.random(1, 901)));
+--- a/src/main/java/core/MenuController.java
++++ b/src/main/java/core/MenuController.java
+@@ -123,7 +123,7 @@
+                 break;
+             }
+             case -4: {// Doubar
+-                menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Thông Tin Boss", "Trang bị và Skin - Vàng", "Thú cưỡi - Vàng"};
++                menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Thông Tin Boss", "Trang bị và Skin - Vàng", "Thú cưỡi - Vàng", "Tinh Tú - Vàng"};
+                 break;
+             }
+             case -33: { // da dich chuyen
+@@ -240,7 +240,8 @@
+                 break;
+             }
+             case -49: {
+-                menu = new String[]{"Phỉ nhổ", "Tu Tiên", "Luyện Thể", "Đả Thông Kinh Mạch", "Thông Tin Cá Nhân", "Nhận Quà Mốc Nạp" };
++                Service.send_msg_data(conn, 23, greetingTop());
++                menu = new String[]{"Chúc phúc", "Tu Tiên", "Luyện Thể", "Đả Thông Kinh Mạch", "Thông Tin Cá Nhân", "Nhận Quà Mốc Nạp" };
+                 break;
+             }
+             case -93: { // cây lồng đèn
+@@ -373,6 +374,9 @@
+                 }
+                 break;
+             }
++            case 1301:
++                if (index >= 0 && index < 6) Service.send_box_UI(conn, 39 + index);
++                break;
+             case 993: {
+                 if (conn.p.id_tach_vp != -1 && conn.p.id_tach_vp < conn.p.item.bag3.length) {
+                     if (conn.p.item.bag3[conn.p.id_tach_vp] != null) {
+@@ -1657,6 +1661,13 @@
+     
+     
+ 
++    private static byte[] greetingTop() throws IOException {
++        Message popup = new Message(23);
++        popup.writer().writeUTF("Ta là Zuzong");
++        popup.writer().writeByte(-49);
++        return popup.getData();
++    }
++
+     private static void Menu_top(Session conn, byte index) throws IOException {
+         if (conn.p.is_detu_training) {
+             Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia tính năng này!");
+@@ -1673,9 +1684,9 @@
+                     conn.p.chucphuc = 0;
+                     conn.p.update_chucphuc(0);
+                     Service.send_notice_box(conn,
+-                            "Thành công nước bọt của bạn rất hôi nên mới nhận được " + ngoc_ + " ngọc," + vang_ + "Vàng.");
++                            "Bạn nhận chúc phúc, được " + ngoc_ + " ngọc," + vang_ + "Vàng.");
+                 } else {
+-                    Service.send_notice_box(conn, "1 ngày nhổ 1 lần thôi phí nước bọt lắm");
++                    Service.send_notice_box(conn, "Bạn đã nhận chúc phúc hôm nay.");
+                 }
+                 break;
+             }
+@@ -3492,6 +3503,10 @@
+             }
+             case 6: {
+                 Service.send_box_UI(conn, 38);
++                break;
++            }
++            case 7: {
++                send_menu_select(conn, 1301, new String[]{"Trắng", "Xanh dương", "Vàng", "Tím", "Cam", "Xanh lá"});
+                 break;
+             }
+             default: {
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -186,7 +186,7 @@
+         }
+         m.writer().writeByte(p.typepk);
+         m.writer().writeShort(p.pointpk);
+-        m.writer().writeByte(p.maxbag); // max bag
++        m.writer().writeShort(p.maxbag); // max bag
+         if (p.myclan != null) {
+             m.writer().writeShort(p.myclan.icon);
+             m.writer().writeInt(Clan.get_id_clan(p.myclan));
+@@ -832,6 +832,26 @@
+         conn.shopType = type;
+         Message m = new Message(23);
+         switch (type) {
++            case 39: case 40: case 41: case 42: case 43: case 44: {
++                java.util.List<template.TinhTu.Offer> offers = template.TinhTu.offers(type - 39);
++                m.writer().writeUTF("Trang bị Tinh Tú - Vàng");
++                m.writer().writeByte(1);
++                m.writer().writeShort(offers.size());
++                for (template.TinhTu.Offer offer : offers) {
++                    Item3 item = offer.createItem();
++                    m.writer().writeShort(offer.key());
++                    m.writer().writeUTF(offer.label());
++                    m.writer().writeByte(item.clazz);
++                    m.writer().writeByte(item.type);
++                    m.writer().writeShort(item.icon);
++                    m.writer().writeLong(offer.price());
++                    m.writer().writeShort(item.level);
++                    m.writer().writeByte(item.color);
++                    item.writeItemOptions(m, conn.p.clazz);
++                    m.writer().writeByte(0);
++                }
++                break;
++            }
+             case 37: {
+                 m.writer().writeUTF("Trang bị và thời trang - Vàng");
+                 m.writer().writeByte(1);
+@@ -1666,6 +1686,21 @@
+                 break;
+             }
+             case 1: {
++                template.TinhTu.Offer variant = template.TinhTu.findOffer(idbuy);
++                if (variant != null) {
++                    if (p.conn.shopType != 39 + variant.color()) return;
++                    long total = variant.price() * quanity;
++                    if (quanity > p.item.get_bag_able() || total > p.get_vang()) {
++                        send_notice_box(p.conn, "Kiểm tra vàng và ô trống trong hành trang.");
++                        return;
++                    }
++                    p.update_vang(-total);
++                    for (int i = 0; i < quanity; i++) p.item.add_item_bag3(variant.createItem());
++                    p.item.char_inventory(3);
++                    p.item.char_inventory(5);
++                    send_notice_box(p.conn, "Đã mua " + variant.label());
++                    return;
++                }
+                 if (idbuy > (ItemTemplate3.item.size() - 1)) {
+                     return;
+                 }
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -22,7 +22,7 @@
+ public final class LoiDai {
+     private static final String[] NAMES = {"Thiên Vũ", "Hàn Phong", "Bạch Nguyệt", "Lạc Vũ", "Xích Long"};
+     private static final int[] SKILLS = {1, 2, 3, 4, 5, 6, 7, 8};
+-    private static final short BADGE = 88;
++    private static final short BADGE = 3596;
+     private static final short GOLD_CHEST = 206;
+     private static final int ROUND_SECONDS = 90;
+ 
+@@ -119,11 +119,15 @@
+         bot.id_name = -1;
+         bot.my_store_name = "";
+         bot.is_nhanban = true;
+-        bot.point1 = bot.point2 = bot.point3 = bot.point4 = bot.level;
++        bot.point1 = bot.point2 = bot.point3 = bot.point4 = bot.level * 3;
++        bot.point3 = Math.max(bot.point3, Math.min(player.point3 * 3 / 4, bot.level * 12));
+         bot.load_skill();
+         for (int skill : SKILLS) {
+-            if (skill < bot.skills.length && bot.skills[skill].mLvSkill.length > 0
+-                    && bot.skills[skill].mLvSkill[0].LvRe <= bot.level + 1) bot.skill_point[skill] = 1;
++            if (skill >= bot.skills.length) continue;
++            for (int rank = 0; rank < Math.min(8, bot.skills[skill].mLvSkill.length - 5); rank++) {
++                if (bot.skills[skill].mLvSkill[rank].LvRe > bot.level + 1) break;
++                bot.skill_point[skill] = (byte) (rank + 1);
++            }
+         }
+         int clazz = bot.clazz;
+         int[] weapons = {4672, 4673, 4675, 4674};
+@@ -143,7 +147,7 @@
+ 
+     private static void equip(Player bot, int slot, int id) {
+         Item3 item = ItemSellCoin.entry.stream().filter(offer -> offer.id == id).findFirst().orElseThrow().createItem();
+-        item.tier = (byte) Util.random(7, 12);
++        item.tier = (byte) Util.random(12, 16);
+         if (slot == 0 && item.op.stream().noneMatch(option -> option.id == 37))
+             item.op.add(new Option(37, 2));
+         item.level = (short) (45 + (bot.level - 45) / 10 * 10);
+@@ -292,23 +296,31 @@
+ 
+     public static void claimTestReward(Player player) throws IOException {
+         synchronized (player) {
+-            if (player.point_active[3] != 0) {
++            if (player.point_active[3] >= 2) {
+                 Service.send_notice_box(player.conn, "Bạn đã nhận quà thử Lôi đài.");
+                 return;
+             }
+-            int badgeCount = player.item.total_item_by_id(4, BADGE);
++            int badgeCount = player.item.total_item_by_id(3, BADGE);
+             int chestCount = player.item.total_item_by_id(4, GOLD_CHEST);
+-            int slots = (badgeCount == 0 ? 1 : 0) + (chestCount == 0 ? 1 : 0);
+-            if (player.item.get_bag_able() < slots || badgeCount >= 32000 || chestCount >= 32000) {
++            boolean legacyClaim = player.point_active[3] == 1;
++            boolean alreadyHasBadge = badgeCount > 0 || (player.item.wear[11] != null && player.item.wear[11].id == BADGE);
++            int slots = (alreadyHasBadge ? 0 : 1) + (!legacyClaim && chestCount == 0 ? 1 : 0);
++            if (player.item.get_bag_able() < slots || (!legacyClaim && chestCount >= 32000)) {
+                 Service.send_notice_box(player.conn, "Hành trang chưa đủ chỗ để nhận quà thử.");
+                 return;
+             }
+-            addReward(player, BADGE, 1);
+-            addReward(player, GOLD_CHEST, 1);
+-            player.point_active[3] = 1;
++            if (!alreadyHasBadge) {
++                Item3 badge = ItemSellCoin.entry.stream().filter(offer -> offer.id == BADGE)
++                        .findFirst().orElseThrow().createItem();
++                player.item.add_item_bag3(badge);
++            }
++            if (!legacyClaim) addReward(player, GOLD_CHEST, 1);
++            player.point_active[3] = 2;
+             player.flush();
+             player.item.char_inventory(4);
+-            Service.send_notice_box(player.conn, "Quà thử đã vào hành trang: 1 Huy hiệu và 1 Rương vàng.");
++            player.item.char_inventory(3);
++            Service.send_notice_box(player.conn, "Quà thử: trang phục Hiệp sĩ nhỏ"
++                    + (legacyClaim ? ". Rương vàng đã nhận ở bản trước." : " và 1 Rương vàng."));
+         }
+     }
+ 
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -1060,7 +1060,7 @@
+             m.writer().writeByte(-25);
+             m.writer().writeByte(1);
+             m.writer().writeUTF("TOP Hiếu Chiến");
+-            m.writer().writeUTF(Map.name_mo);
++            m.writer().writeUTF("Ta là Zuzong");
+             m.writer().writeByte(-49);
+             m.writer().writeByte(15);
+             //
+--- a/src/main/java/template/TinhTu.java
++++ b/src/main/java/template/TinhTu.java
+@@ -59,52 +59,125 @@
+         return chance > 0 && (chance >= 10000 || Util.random(10000) < chance);
+     }
+ 
+-    // Observed level-45 tooltips, in order. Values are examples from the recordings.
+-    // https://www.youtube.com/watch?v=x1MXpFen3Pc (3:20, 3:54, 4:29, 5:43, 6:34, 7:44, 8:30)
+-    // https://www.youtube.com/watch?v=z3z1tuLECzw (1:30, 10:07, 10:10, 11:07)
+-    // https://www.youtube.com/watch?v=dvtAyHGStbk (5:51)
++    private static final int[] START_IDS = {1360, 1400, 1320, 1440, 1520, 1560, 1480, 0, 1280, 1285, 1295, 1290};
++    private static final String[] COLORS = {"trắng", "xanh dương", "vàng", "tím", "cam", "xanh lá"};
++    private static final int[] IDS = {4656,4657,4658,4659,4660,4661,4662,4663,4664,4665,4666,4667,
++            4668,4669,4670,4671,4672,4673,4674,4675};
++    private static final int OFFER_START = 10000;
++
++    public record Offer(short key, short itemId, int variant, byte color) {
++        public long price() { return 150_000L + color * 50_000L; }
++
++        public Item3 createItem() {
++            ItemTemplate3 t = ItemTemplate3.item.get(itemId);
++            Item3 item = new Item3();
++            item.id = itemId;
++            item.name = t.getName();
++            item.clazz = t.getClazz();
++            item.type = t.getType();
++            item.level = 45;
++            item.icon = t.getIcon();
++            item.color = color;
++            item.part = t.getPart();
++            item.islock = true;
++            item.op = options(t, color, variant);
++            if (color >= 3) {
++                item.op.add(new Option(129,10000));
++                item.op.add(new Option(130,100 * (color - 2)));
++            }
++            return item;
++        }
++
++        public String label() {
++            ItemTemplate3 t = ItemTemplate3.item.get(itemId);
++            String variantName = ItemTemplate3.item.get(modelId(t, 4, variant)).getName();
++            return t.getName() + " (" + variantName + ", " + COLORS[color] + ")";
++        }
++    }
++
++    public static List<Offer> offers(int quality) {
++        List<Offer> offers = new ArrayList<>();
++        for (int i = 0; i < IDS.length; i++) {
++            ItemTemplate3 t = ItemTemplate3.item.get(IDS[i]);
++            int variations = t.getClazz() == 4 ? 8 : 2;
++            for (int v = 0; v < variations; v++) {
++                int key = OFFER_START + (i * 8 + v) * COLORS.length + quality;
++                offers.add(new Offer((short)key,(short)IDS[i],v,(byte)quality));
++            }
++        }
++        return offers;
++    }
++
++    public static Offer findOffer(int key) {
++        int index = key - OFFER_START;
++        if (index < 0 || index >= IDS.length * 8 * COLORS.length) return null;
++        ItemTemplate3 t = ItemTemplate3.item.get(IDS[index / (8 * COLORS.length)]);
++        int variant = index / COLORS.length % 8;
++        if (variant >= (t.getClazz() == 4 ? 8 : 2)) return null;
++        return new Offer((short)key,t.getId(),variant,(byte)(index % COLORS.length));
++    }
++
++    private static int modelId(ItemTemplate3 template, int color, int variant) {
++        int type = template.getType();
++        int first = START_IDS[type];
++        if (type <= 2) first += template.getClazz() * 5 + variant * 20;
++        else if (type >= 8) first += variant * 20;
++        else first += variant * 5;
++        return first + Math.min(color,4);
++    }
++
+     public static List<Option> baseOptions(ItemTemplate3 template, int color) {
+-        int[] sample = switch (template.getId()) {
+-            case 4656 -> color == 4 ? new int[]{14,214,15,1071,16,804,25,16} : null;
+-            case 4659 -> color == 4 ? new int[]{14,198,15,1071,16,893,24,14} : null;
+-            case 4660 -> color == 3 ? new int[]{14,145,16,625,25,24} : null;
+-            case 4667 -> color == 2 ? new int[]{7,3076,14,145,27,1593} : null;
+-            case 4668 -> color == 4 ? new int[]{9,2697,14,138,32,447,33,329} : null;
+-            case 4669 -> color == 2 ? new int[]{9,2697,23,17}
+-                    : color == 3 ? new int[]{23,22,25,22} : null;
+-            case 4784 -> color == 5 ? new int[]{10,2697,26,17,36,399} : null;
+-            case 4670 -> color == 1 ? new int[]{23,16,24,13,25,16,26,16}
+-                    : color == 4 ? new int[]{24,21,34,316} : null;
+-            case 4671 -> color == 1 ? new int[]{14,138,23,24} : null;
+-            case 4673 -> color == 4 ? new int[]{0,330,33,469,37,2,40,597} : null;
+-            case 4674 -> color == 4 ? new int[]{0,319,34,368,37,2,40,597} : null;
+-            case 4675 -> color == 4 ? new int[]{1,330,35,336,37,2,40,597} : null;
+-            default -> null;
++        int variant = switch (template.getId()) {
++            case 4668 -> 4;
++            case 4780 -> 6;
++            case 4781 -> 5;
++            case 4782 -> 7;
++            case 4783 -> 6;
++            case 4784 -> 7;
++            case 4785 -> 5;
++            case 4671 -> 3;
++            case 4786 -> 7;
++            case 4787 -> 5;
++            case 4788 -> 6;
++            default -> 0;
+         };
+-        List<Option> options = new ArrayList<>();
+-        if (sample == null) {
+-            for (Option option : template.getOp()) options.add(new Option(option.id, option.getParam(0)));
+-        } else {
+-            for (int i = 0; i < sample.length; i += 2) options.add(new Option(sample[i], sample[i + 1]));
++        return options(template, color, variant);
++    }
++
++    public static List<Option> options(ItemTemplate3 template, int color, int variant) {
++        ItemTemplate3 model = ItemTemplate3.item.get(modelId(template,color,variant));
++        List<Option> result = new ArrayList<>();
++        int type = template.getType();
++        for (Option source : model.getOp()) {
++            int id = Byte.toUnsignedInt(source.id);
++            int value = source.getParam(0);
++            if (type >= 8 && (id <= 4 || id == 37 || id == 40)) continue;
++            if (color == 5) value += Math.max(1, value / 10);
++            result.add(new Option(id,value));
+         }
+-        return options;
++        if (type >= 8) {
++            int element = Item3.getClassDamageOptionId(template.getClazz());
++            int phys = type == 8 || type == 9 ? 330 : 319;
++            int base = 597;
++            int scaling = switch (color) {
++                case 0 -> 60; case 1 -> 70; case 2 -> 80; case 3 -> 90; case 5 -> 110; default -> 100;
++            };
++            result.add(0, new Option(0, phys * scaling / 100));
++            result.add(1, new Option(element, 330 * scaling / 100));
++            if (color >= 3) result.add(new Option(37, color >= 4 ? 2 : 1));
++            result.add(new Option(40, base * scaling / 100));
++        } else if (type == 1 && result.stream().noneMatch(o -> o.id == 29 || o.id == 30)) {
++            boolean mana = (template.getClazz() == 1 || template.getClazz() == 2) ^ (variant == 1);
++            result.add(new Option(mana ? 30 : 29, 150 + color * 40));
++        }
++        return result;
+     }
+ 
+     public static void addShopMetadata(Item3 item) {
+-        if (item.color < 3) return;
+-        item.op.add(new Option(129, 10000));
+-        int[] sample = switch (item.id) {
+-            case 4656 -> new int[]{130,168};
+-            case 4659 -> new int[]{130,277,145,98};
+-            case 4668 -> new int[]{130,391,167,57};
+-            case 4670 -> new int[]{130,261,151,67};
+-            case 4673 -> new int[]{130,152,172,99};
+-            case 4674 -> new int[]{130,387,155,154};
+-            case 4675 -> new int[]{130,237,143,72};
+-            case 4784 -> new int[]{130,371,167,77};
+-            default -> new int[0];
+-        };
+-        for (int i = 0; i < sample.length; i += 2) item.op.add(new Option(sample[i], sample[i + 1]));
++        if (item.color >= 3) {
++            item.op.add(new Option(129,10000));
++            item.op.add(new Option(130,100 * (item.color - 2)));
++        }
+     }
+ 
+     public static int rollStat(int maximum) {

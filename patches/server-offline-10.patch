@@ -1,0 +1,600 @@
+--- a/src/main/java/client/MessageHandler.java
++++ b/src/main/java/client/MessageHandler.java
+@@ -311,6 +311,7 @@
+             case 12: {
+                 conn.p.is_changemap = false;
+                 template.RankBadge.send(conn.p, conn.p);
++                template.EquippedEffects.send(conn.p, conn.p);
+ 
+                 // Spawn summoned disciple when client has finished loading map (eg.g == true)
+                 if (conn.p.detu != null && conn.p.detu.state == Disciple.STATE_SUMMONED) {
+--- a/src/main/java/client/Pet.java
++++ b/src/main/java/client/Pet.java
+@@ -12,11 +12,12 @@
+ 
+     public static final byte TYPE_DAI_BANG = 3;
+     public static final short ID_DAI_BANG = 3269;
++    public static final short ID_CAT = 4831;
+     public static final int EAGLE_GOLD_MIN = 100;
+     public static final int EAGLE_GOLD_MAX = 3000;
+ 
+     public static String[] name_template = new String[]{"Cú", "Dơi", "Sói", "Đại Bàng", "Khỉ", "Rồng lửa", "Thỏ",
+-        "Phượng hoàng băng", "Zabivaka", "Bóng ma", "Dê con", "Yêu tinh", "Thiên thần", "Sao la"};
++        "Phượng hoàng băng", "Zabivaka", "Bóng ma", "Dê con", "Yêu tinh", "Thiên thần", "Sao la", "Mèo"};
+     public static byte[] type_template = new byte[]{8, 13, 10, 11, 11, 11, 12, 12, 12, 9, 7, 7, 7, 6, 5, 5, 5, 4, 4, 4,
+         3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0};
+     public static byte[] icon_template = new byte[]{26, 41, 32, 33, 34, 35, 36, 37, 38, 29, 21, 22, 23, 20, 15, 16, 17,
+@@ -192,9 +193,10 @@
+                 maxdam_ = new int[]{0, 0, 0, 0, 4500, 200, 3, 2000};
+                 break;
+             }
++            case ID_CAT:
+             case 4768: {
+-                temp.icon = 39;
+-                temp.type = 13;
++                temp.icon = (byte) (id == ID_CAT ? 42 : 39);
++                temp.type = (byte) (id == ID_CAT ? 14 : 13);
+                 id_ = new byte[]{23, 24, 25, 26, 48, 80, 85, 86, 114, 1}; // chir so
+                 param_ = new int[]{1, 1, 1, 1, 1500, 100, 100, 1000, 2, 1000};
+                 maxdam_ = new int[]{0, 0, 0, 0, 4500, 200, 150, 1500, 3, 2000};
+@@ -260,7 +262,8 @@
+ 
+         } else if (type == 13) {
+             return 4768;
+-
++        } else if (type == 14) {
++            return ID_CAT;
+         }
+         return 2943;
+ 
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -41,6 +41,7 @@
+ import template.Mob_MoTaiNguyen;
+ import template.Option;
+ import template.OfflineSkins;
++import template.EquippedEffects;
+ import template.Part_fashion;
+ import template.Part_player;
+ import template.Pet_di_buon;
+@@ -1539,6 +1540,7 @@
+         long dame_exp = expup;
+         if (expmulti && this.getlevelpercent() >= 0) {
+             dame_exp *= Manager.gI().exp;
++            dame_exp += dame_exp * body.total_item_param(51) / 10_000;
+         }
+         if (type_use_mount == 4) {
+             dame_exp += ((dame_exp * 5) / 100);
+@@ -1819,10 +1821,19 @@
+                 b = OfflineSkins.MOUNT_SLOT;
+                 break;
+             }
++            case EquippedEffects.LANTERN_TYPE:
++                b = EquippedEffects.LANTERN_SLOT;
++                break;
++            case EquippedEffects.AURA_TYPE:
++                b = EquippedEffects.AURA_SLOT;
++                break;
+         }
+         if (b == -1) {
+             Service.send_notice_box(conn, "Có lỗi xảy ra, hãy thử lại");
+             return;
++        }
++        if (b == EquippedEffects.LANTERN_SLOT || b == EquippedEffects.AURA_SLOT) {
++            EquippedEffects.remove(this, item.wear[b], b);
+         }
+         if (item.wear[b] == null) {
+             temp3.name = ItemTemplate3.item.get(temp3.id).getName() + " [Khóa]";
+@@ -1867,6 +1878,7 @@
+         item.char_inventory(3);
+         Service.send_wear(this);
+         Service.send_char_main_in4(conn.p);
++        if (b == EquippedEffects.LANTERN_SLOT || b == EquippedEffects.AURA_SLOT) EquippedEffects.send(this, this);
+         	MapService.change_flag(conn.p.map, conn.p, typepk);
+         MapService.update_in4_2_other_inside(this.map, this);
+     }
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -1164,6 +1164,8 @@
+                     case 25:
+                     case 26:
+                     case OfflineSkins.MOUNT_ITEM:
++                    case template.EquippedEffects.LANTERN_TYPE:
++                    case template.EquippedEffects.AURA_TYPE:
+                     case 27: // danh hieu
+                     case 11: { // weapon
+                         conn.p.player_wear(conn, temp3, id, index);
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -1329,6 +1329,7 @@
+         // System.out.println(wing);
+         // System.out.println(id);
+         if (type == 1) { // create
++            if (wing < 2880 || wing > 2929 || (wing - 2880) % 7 != 0) return;
+             if (conn.p.item.get_bag_able() < 1) {
+                 Service.send_notice_box(conn, "Hành trang không đủ chỗ!");
+                 return;
+@@ -1540,7 +1541,7 @@
+                             op_new = new Option(1, 1);
+                             switch (it.id) {
+                                 case 2894:
+-                                case 2929:
++                                case 2922:
+                                 case 2908:
+                                 case 2880: {
+                                     op_new.id = 7;
+@@ -1558,7 +1559,7 @@
+                                     op_new.id = 8;
+                                     break;
+                                 }
+-                                case 2922: {
++                                case 2929: {
+                                     op_new.id = 10;
+                                     break;
+                                 }
+--- a/src/main/java/core/MenuController.java
++++ b/src/main/java/core/MenuController.java
+@@ -116,9 +116,9 @@
+             } // Alisama
+             case -5: { // Hammer
+                 if (conn.p.dropnlmd == 1) {
+-                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Tắt NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi"};
++                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Tắt NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi", "Mua Hồ quang"};
+                 } else {
+-                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Mở NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi"};
++                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Mở NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi", "Mua Hồ quang"};
+                 }
+                 break;
+             }
+@@ -166,7 +166,7 @@
+             case -44: {
+                 menu = new String[]{"Nhận GiftCode", "Tháo cánh", "Tháo cải trang", "Tháo mề đay", "Tháo mặt nạ",
+                     "Tháo cánh thời trang", "Tháo áo choàng", "Tháo tóc thời trang", "Tháo vũ khí thời trang",
+-                    "Tháo tai nghe thời trang", "Tiệc cưới"};
++                    "Tháo tai nghe thời trang", "Tiệc cưới", "Tháo thú cưỡi", "Tháo lồng đèn", "Tháo pháp trận"};
+                 break;
+             }
+             case -32: {
+@@ -236,7 +236,7 @@
+                 break;
+             }
+             case -41: {
+-                menu = new String[]{"Tạo cánh", "Nâng cấp cánh", "Kích hoạt cánh", "Tách cánh"};
++                menu = new String[]{"Tạo cánh", "Nâng cấp cánh", "Kích hoạt cánh", "Tách cánh", "Mua nguyên liệu tạo cánh"};
+                 break;
+             }
+             case -49: {
+@@ -1799,6 +1799,9 @@
+                 }
+                 break;
+             }
++            case 4:
++                Service.send_box_UI(conn, 45);
++                break;
+             default: {
+                 Service.send_notice_box(conn, "Chưa có chức năng");
+                 break;
+@@ -2584,6 +2587,20 @@
+                 send_menu_select(conn, 114, new String[]{"Cầu hôn", "Ly hôn", "Nâng cấp nhẫn", "Hướng dẫn"});
+                 break;
+             }
++            case 11:
++                if (conn.p.id_horse == -1 && conn.p.type_use_mount == -1
++                        && template.OfflineSkins.equippedMount(conn.p) == null) {
++                    Service.send_notice_box(conn, "Bạn chưa cưỡi thú.");
++                } else {
++                    conn.p.dismount();
++                }
++                break;
++            case 12:
++                template.EquippedEffects.unequip(conn.p, template.EquippedEffects.LANTERN_SLOT);
++                break;
++            case 13:
++                template.EquippedEffects.unequip(conn.p, template.EquippedEffects.AURA_SLOT);
++                break;
+             default: {
+                 Service.send_notice_box(conn, "Chưa có chức năng");
+                 break;
+@@ -3451,6 +3468,9 @@
+                 break;
+             case 8:
+                 conn.p.dismount();
++                break;
++            case 9:
++                if (template.HeroArmor.available()) Service.send_box_UI(conn, 46);
+                 break;
+             default: {
+                 Service.send_notice_box(conn, "Chưa có chức năng");
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -848,10 +848,23 @@
+         }
+     }
+ 
++    private static final short[] HERO_MATERIALS = {
++        template.HeroArmor.FIRST_MATERIAL, template.HeroArmor.FIRST_MATERIAL + 1,
++        template.HeroArmor.FIRST_MATERIAL + 2, template.HeroArmor.FIRST_MATERIAL + 3
++    };
++
+     public static void send_box_UI(Session conn, int type) throws IOException {
+         conn.shopType = type;
+         Message m = new Message(23);
+         switch (type) {
++            case 45: case 46: {
++                short[] materials = type == 45 ? ItemSellCoin.WING_MATERIALS : HERO_MATERIALS;
++                m.writer().writeUTF(type == 45 ? "Nguyên liệu tạo cánh - Vàng" : "Hồ quang - Vàng");
++                m.writer().writeByte(4);
++                m.writer().writeShort(materials.length);
++                for (short material : materials) m.writer().writeShort(material);
++                break;
++            }
+             case 39: case 40: case 41: case 42: case 43: case 44: {
+                 java.util.List<template.TinhTu.Offer> offers = template.TinhTu.offers(type - 39);
+                 m.writer().writeUTF("Trang bị Tinh Tú - Vàng");
+@@ -1792,6 +1805,7 @@
+                             }
+                         }
+                         if (itemsellcoin != null) {
++                            if (template.OfflineSkins.isCraftedArmor(idbuy)) return;
+                             if (p.conn.shopType == 37 && ItemSellCoin.REMOVED_GOLD_STOCK.contains((int)idbuy)) return;
+                             if (!itemsellcoin.available()) {
+                                 send_notice_box(p.conn, "Skin này thiếu tài nguyên hiển thị trong bản game hiện tại.");
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -23,7 +23,8 @@
+     private static final String[] NAMES = {"Thiên Vũ", "Hàn Phong", "Bạch Nguyệt", "Lạc Vũ", "Xích Long"};
+     private static final int[] SKILLS = {1, 2, 3, 4, 5, 6, 7, 8};
+     private static final short GOLD_CHEST = 206;
+-    private static final int ROUND_SECONDS = 90;
++    private static final int ROUND_SECONDS = 60;
++    public static final int UPDATE_MILLIS = 250;
+ 
+     public final Player p1;
+     public final Player p2;
+@@ -33,7 +34,9 @@
+     private final short returnY;
+     private final long previousHp;
+     private final int previousMp;
+-    private int time = 20;
++    private long deadline = System.nanoTime() + 20_000_000_000L;
++    private long nextAttack;
++    private int lastBroadcast = -1;
+     public volatile int state_ld;
+     public int round = 1;
+     private int wins;
+@@ -169,47 +172,61 @@
+ 
+     public synchronized void ready() {
+         if (!ready) {
+-            time = 3;
++            setTimer(1);
+             ready = true;
+         }
+     }
+ 
+-    public void update_atk() throws IOException {
++    private int secondsLeft() {
++        return (int) Math.max(0, (deadline - System.nanoTime() + 999_999_999) / 1_000_000_000L);
++    }
++
++    private void setTimer(int seconds) {
++        deadline = System.nanoTime() + seconds * 1_000_000_000L;
++        lastBroadcast = -1;
++    }
++
++    public synchronized void update_atk() throws IOException {
+         if (!p1.conn.connected || p1.map != map) {
+             map.stop_map();
+             return;
+         }
+-        if (finished) {
+-            if (--time <= 0) leave(p1);
+-            return;
+-        }
+-        if (!ready) {
+-            if (--time <= 0) leave(p1);
+-            return;
+-        }
+-        moveOpponent();
+-        if (state_ld == 0) {
+-            if (--time <= 0) {
+-                state_ld = 1;
+-                time = ROUND_SECONDS;
+-            }
+-        } else if (p1.isdie || p2.isdie || --time <= 0) {
+-            if (p2.isdie && !p1.isdie) wins++;
+-            if (p1.isdie && !p2.isdie) losses++;
+-            if (wins == 2 || losses == 2 || round == 3) finish();
+-            else {
+-                round++;
+-                resetFighters();
+-                time = 3;
+-                state_ld = 0;
+-            }
+-        } else {
+-            attackWithSkill();
+-        }
+-        if (time % 5 == 0 || state_ld != 1) update_time_atk();
+-    }
+-
+-    private void moveOpponent() throws IOException {
++        int time = secondsLeft();
++        if (finished || !ready) {
++            if (time == 0) leave(p1);
++            return;
++        }
++        moveOpponent(time);
++        if (state_ld == 0 && time == 0) {
++            state_ld = 1;
++            setTimer(ROUND_SECONDS);
++        }
++        if (state_ld == 1) {
++            if (p1.isdie || p2.isdie || secondsLeft() == 0) {
++                if (p2.isdie && !p1.isdie) wins++;
++                if (p1.isdie && !p2.isdie) losses++;
++                if (wins == 2 || losses == 2 || round == 3) finish();
++                else {
++                    round++;
++                    resetFighters();
++                    nextAttack = 0;
++                    setTimer(1);
++                    state_ld = 0;
++                }
++            } else if (System.nanoTime() >= nextAttack) {
++                nextAttack = System.nanoTime() + 500_000_000L;
++                attackWithSkill();
++            }
++        }
++        time = secondsLeft();
++        if (time != lastBroadcast) {
++            if (state_ld == 0) MapService.send_in4_other_char(map, p1, p2);
++            lastBroadcast = time;
++            update_time_atk();
++        }
++    }
++
++    private void moveOpponent(int time) throws IOException {
+         if (p2.isdie) return;
+         int targetX = Math.max(216, Math.min(450, p1.x + (time % 8 < 4 ? 48 : -48)));
+         int targetY = Math.max(180, Math.min(300, p1.y + (time % 6 < 3 ? 24 : -24)));
+@@ -219,7 +236,7 @@
+         position.writer().writeByte(0); position.writer().writeShort(0);
+         position.writer().writeShort(p2.id); position.writer().writeShort(p2.x); position.writer().writeShort(p2.y);
+         position.writer().writeByte(-1); p1.conn.addmsg(position);
+-        if (state_ld == 0) MapService.send_in4_other_char(map,p1,p2);
++
+     }
+ 
+     private void attackWithSkill() throws IOException {
+@@ -253,7 +270,7 @@
+         p1.point_active[2] += delta;
+         finished = true;
+         state_ld = 2;
+-        time = 5;
++        setTimer(5);
+         Service.send_notice_box(p1.conn, (wins > losses ? "Bạn thắng." : wins == losses ? "Trận hòa." : "Bạn thua.")
+                 + " Tỷ số " + wins + "-" + losses + ". Điểm Lôi đài: " + p1.point_active[2] + ".");
+     }
+@@ -278,7 +295,7 @@
+         Message message = new Message(-104);
+         message.writer().writeByte(1);
+         message.writer().writeByte(1);
+-        message.writer().writeShort(Math.max(0, time));
++        message.writer().writeShort(secondsLeft());
+         message.writer().writeUTF(finished ? "Kết thúc Lôi đài" : "Lôi đài · Hiệp " + round);
+         p1.conn.addmsg(message);
+     }
+--- a/src/main/java/map/LeaveItemMap.java
++++ b/src/main/java/map/LeaveItemMap.java
+@@ -65,7 +65,8 @@
+ 				if (ef != null) {
+ 					vang_drop += (vang_drop * (ef.param / 100)) / 100;
+ 				}
+-				map.item_map[index_item_map].quantity = (short) vang_drop;
++				vang_drop += vang_drop * p.body.total_item_param(52) / 10_000;
++				map.item_map[index_item_map].quantity = (short) Math.min(Short.MAX_VALUE, vang_drop);
+ 				map.item_map[index_item_map].category = 4;
+ 				map.item_map[index_item_map].idmaster = (short) p.id;
+ 				map.item_map[index_item_map].time_exist = System.currentTimeMillis() + 60_000L;
+--- a/src/main/java/map/Map.java
++++ b/src/main/java/map/Map.java
+@@ -94,10 +94,14 @@
+ 		long time1 = 0;
+ 		long time2 = 0;
+ 		long time3 = 0;
++		long nextWorldUpdate = 0;
+ 		while (this.running) {
+ 			try {
+ 				time1 = System.currentTimeMillis();
+-				update();
++				if (time1 >= nextWorldUpdate) {
++					update();
++					nextWorldUpdate = time1 + 1000;
++				}
+ 				if (this.time_chat < System.currentTimeMillis()) {
+ 					this.time_chat = System.currentTimeMillis() + 8000L;
+ 					auto_chat_npc();
+@@ -122,7 +126,7 @@
+ 					this.ld.update_atk();
+ 				}
+ 				time2 = System.currentTimeMillis();
+-				time3 = (1_000L - (time2 - time1));
++				time3 = (this.ld == null ? 1_000L : LoiDai.UPDATE_MILLIS) - (time2 - time1);
+ 				if (time3 > 0) {
+ 					if (time3 < 20) {
+ 						System.err.println("map_id " + this.map_id + " - zone " + (this.zone_id + 1) + " overload...");
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1618,6 +1618,7 @@
+             p.conn.addmsg(m);
+             m.cleanup();
+             template.RankBadge.send(p, p0);
++            template.EquippedEffects.send(p, p0);
+             for (int i = 0; i < p0.list_eff.size(); i++) {
+                 EffTemplate temp = p0.list_eff.get(i);
+                 if (temp.id == 52 || temp.id == 53 || temp.id == 23 || temp.id == 24 || temp.id == -124 || temp.id == -123
+--- /dev/null
++++ b/src/main/java/template/EquippedEffects.java
+@@ -0,0 +1,74 @@
++package template;
++
++import client.Player;
++import core.Service;
++import core.Util;
++import io.Message;
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import map.MapService;
++
++public final class EquippedEffects {
++    public static final byte LANTERN_TYPE = 31;
++    public static final byte AURA_TYPE = 32;
++    public static final int LANTERN_SLOT = 21;
++    public static final int AURA_SLOT = 20;
++
++    private EquippedEffects() {}
++
++    public static void send(Player viewer, Player wearer) throws IOException {
++        display(viewer, wearer, wearer.item.wear[LANTERN_SLOT], 0);
++        display(viewer, wearer, wearer.item.wear[AURA_SLOT], 1);
++    }
++
++    private static void display(Player viewer, Player wearer, Item3 item, int layer) throws IOException {
++        if (item == null || !OfflineSkins.has(item.id)) return;
++        int id = Byte.toUnsignedInt(item.part);
++        int zoom = Math.max(1, Math.min(4, viewer.conn.zoomlv));
++        byte[] effect = Util.loadfile("data/part_char/imgver/x" + zoom + "/111_" + id);
++        int start = 4 + ByteBuffer.wrap(effect).getInt();
++        Message packet = new Message(-49);
++        packet.writer().writeByte(0);
++        packet.writer().writeShort(effect.length - start);
++        packet.writer().write(effect, start, effect.length - start);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(id);
++        packet.writer().writeShort(wearer.id);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(layer);
++        packet.writer().writeShort(Short.MAX_VALUE);
++        packet.writer().writeByte(0);
++        viewer.conn.addmsg(packet);
++        packet.cleanup();
++    }
++
++    public static void remove(Player player, Item3 item, int slot) throws IOException {
++        if (item == null || !OfflineSkins.has(item.id)) return;
++        Message packet = new Message(-49);
++        packet.writer().writeByte(100);
++        packet.writer().writeShort(player.id);
++        packet.writer().writeByte(item.part);
++        packet.writer().writeByte(0);
++        packet.writer().writeByte(slot == AURA_SLOT ? 1 : 0);
++        MapService.send_msg_player_inside(player.map, player, packet, true);
++        packet.cleanup();
++    }
++
++    public static void unequip(Player player, int slot) throws IOException {
++        Item3 item = player.item.wear[slot];
++        if (item == null) {
++            Service.send_notice_box(player.conn, "Bạn chưa trang bị vật phẩm này.");
++            return;
++        }
++        if (player.item.get_bag_able() <= 0 || !player.item.add_item_bag3(item)) {
++            Service.send_notice_box(player.conn, "Hành trang đầy!");
++            return;
++        }
++        player.item.wear[slot] = null;
++        remove(player, item, slot);
++        player.item.char_inventory(3);
++        Service.send_wear(player);
++        Service.send_char_main_in4(player);
++    }
++}
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -165,7 +165,8 @@
+     }
+ 
+     private static boolean cosmetic(int type) {
+-        return type == 15 || (type >= 21 && type <= 27) || type == OfflineSkins.MOUNT_ITEM;
++        return type == 15 || (type >= 21 && type <= 27) || type == OfflineSkins.MOUNT_ITEM
++                || type == EquippedEffects.LANTERN_TYPE || type == EquippedEffects.AURA_TYPE;
+     }
+ 
+     public Item3 createItem() {
+@@ -190,14 +191,17 @@
+         return item;
+     }
+ 
++    public static final short[] WING_MATERIALS = {8, 9, 10, 11, 0, 3};
++
+     public static short[] configure(short[] materialIds) {
+         java.util.Map<Short, ItemSellCoin> offers = new java.util.LinkedHashMap<>();
+         for (ItemSellCoin offer : entry) offers.putIfAbsent(offer.id, offer);
+         for (ItemTemplate3 template : ItemTemplate3.item) {
+-            if (cosmetic(template.getType()) && !offers.containsKey(template.getId())) {
++            if ((cosmetic(template.getType()) || template.getId() == client.Pet.ID_CAT)
++                    && !offers.containsKey(template.getId())) {
+                 ItemSellCoin offer = new ItemSellCoin();
+                 offer.id = template.getId();
+-                offer.price = template.getType() == 27 ? 200000 : 400000;
++                offer.price = template.getType() == 14 ? 150000 : template.getType() == 27 ? 200000 : 400000;
+                 offer.op = new ArrayList<>();
+                 offers.put(offer.id, offer);
+             }
+@@ -242,6 +246,12 @@
+         java.util.Set<Short> materials = new java.util.LinkedHashSet<>();
+         for (short id : materialIds) materials.add(id);
+         for (short id : new short[]{0, 1, 2, 3}) materials.add(id);
++        for (short id : WING_MATERIALS) {
++            ItemTemplate7 material = ItemTemplate7.item.get(id);
++            material.setPricetype((byte) 0);
++            material.setPrice(id == 3 ? 4_000 : 1_000);
++            materials.add(id);
++        }
+         for (short id = HeroArmor.FIRST_MATERIAL; id < HeroArmor.FIRST_MATERIAL + 4 && id < ItemTemplate7.item.size(); id++)
+             materials.add(id);
+         // Native medal materials: level 1 occupies IDs 46 through 145.
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -15,7 +15,7 @@
+ /** Imports the private cosmetic catalog before character saves are read. */
+ public final class OfflineSkins {
+     private static final Set<Short> items = new HashSet<>();
+-    private static final Set<Short> newItems = new HashSet<>();
++    private static final java.util.Map<Short, Integer> itemReleases = new java.util.HashMap<>();
+     public static final byte MOUNT_ITEM = 30;
+     public static final int MOUNT_SLOT = 22;
+     private static final java.util.Map<Short, Mount> mounts = new java.util.LinkedHashMap<>();
+@@ -57,7 +57,7 @@
+             }
+             if (!pumpkin) ItemTemplate3.item.add(item);
+             items.add(id);
+-            if (row.containsKey("release")) newItems.add(id);
++            if (row.containsKey("release")) itemReleases.put(id, number(row, "release").intValue());
+         }
+         loadMounts();
+     }
+@@ -127,7 +127,8 @@
+ 
+     public static boolean grant(Player player) {
+         int previous = player.point_active[6];
+-        int release = wearableMounts.isEmpty() ? (newItems.isEmpty() ? 1 : 2) : 3;
++        int lastItemRelease = itemReleases.values().stream().mapToInt(Integer::intValue).max().orElse(1);
++        int release = Math.max(wearableMounts.isEmpty() ? 1 : 3, lastItemRelease);
+         if (!"zuzong".equalsIgnoreCase(player.name) || items.isEmpty() || previous >= release) return false;
+         Set<Short> owned = new HashSet<>();
+         for (Item3[] group : new Item3[][] {player.item.bag3, player.item.wear, player.item.box3}) {
+@@ -135,8 +136,10 @@
+         }
+         var outfits = ItemSellCoin.entry.stream()
+                 .filter(offer -> !owned.contains(offer.id))
+-                .filter(offer -> wearableMounts.containsKey(offer.id) || previous == 0 && has(offer.id) && !isCraftedArmor(offer.id)
+-                        || previous < 2 && (newItems.contains(offer.id) || isOriginalWeaponSkin(offer.id)))
++                .filter(offer -> previous < 3 && wearableMounts.containsKey(offer.id)
++                        || itemReleases.getOrDefault(offer.id, 0) > previous
++                        || previous == 0 && has(offer.id) && !isCraftedArmor(offer.id) && offer.id != client.Pet.ID_CAT
++                        || previous < 2 && isOriginalWeaponSkin(offer.id))
+                 .toList();
+         var mounts = new ArrayList<Short>();
+         if (previous == 0) for (short id : ItemSellCoin.MOUNTS)

@@ -1,0 +1,204 @@
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -207,6 +207,7 @@
+     public HashMap<Integer, Boolean> other_mob_inside;
+     public HashMap<Integer, Boolean> other_mob_inside_update;
+     public int pendingHeroArmor = -1;
++    public volatile int offlineSpeed = 1;
+     public byte type_use_mount;
+     public short id_item_rebuild;
+     public boolean is_use_mayman;
+@@ -633,6 +634,16 @@
+                 item.box3[i] = temp;
+             }
+             jsar.clear();
++            if (item.wear[17] != null && item.wear[17].id == 4838) {
++                Item3 aura = item.wear[17];
++                int slot = template.EquippedEffects.AURA_SLOT;
++                if (item.wear[slot] == null) {
++                    item.wear[slot] = aura;
++                    item.wear[17] = null;
++                } else if (item.add_item_bag3(aura)) {
++                    item.wear[17] = null;
++                }
++            }
+             jsar = (JSONArray) JSONValue.parse(rs.getString("rms_save"));
+             if (jsar == null) {
+                 return false;
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -38,11 +38,7 @@
+                         Service.send_notice_box(conn, "Hãy xuống thú cưỡi đang trang bị trước.");
+                         return;
+                     }
+-                    if (conn.p.id_horse != -1) {
+-                        conn.p.id_horse = -1;
+-                        MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+-                        Service.send_char_main_in4(conn.p);
+-                    }
++                    conn.p.id_horse = -1;
+                     use_item_mount(conn, id);
+                     break;
+                 }
+@@ -62,11 +58,11 @@
+             conn.p.item.char_inventory(3);
+         } else if (conn.p.myclan != null && conn.p.myclan.check_id(id)) {
+             if (ItemTemplate4.item.get(id).getType() == 44) {
+-                if (conn.p.id_horse != -1) {
+-                    conn.p.id_horse = -1;
+-                    MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+-                    Service.send_char_main_in4(conn.p);
+-                }
++                if (OfflineSkins.equippedMount(conn.p) != null) {
++                    Service.send_notice_box(conn, "Hãy xuống thú cưỡi đang trang bị trước.");
++                    return;
++                }
++                conn.p.id_horse = -1;
+                 use_item_mount(conn, id);
+             } else {
+                 use_item4_default(conn, id);
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -263,10 +263,12 @@
+     public static void writeFashionParts(Message m, Player p) throws IOException {
+         boolean showHair = p.item.wear[11] == null && p.item.wear[16] != null;
+         short nativeHair = template.OfflineSkins.nativeHair(p);
++        boolean crown = p.item.wear[11] == null && p.item.wear[16] == null
++                && !p.is_detu_training && "zuzong".equalsIgnoreCase(p.name);
+         boolean hideHat = showHair || (p.item.wear[13] != null && p.fashion[2] == -1);
+         m.writer().writeByte(p.fashion.length);
+         for (int i = 0; i < p.fashion.length; i++) {
+-            m.writer().writeShort(i == 2 && hideHat ? -2
++            m.writer().writeShort(i == 2 && crown ? 50 : i == 2 && hideHat ? -2
+                     : i == 5 && nativeHair >= 0 ? nativeHair : get_fashion_part(p.fashion[i]));
+         }
+     }
+@@ -289,7 +291,7 @@
+     }
+ 
+     public static short get_id_weapon(Player p) {
+-        if (p.item.wear[17] != null) {
++        if (p.item.wear[17] != null && p.item.wear[17].type == 24) {
+             return (short) (Byte.toUnsignedInt(p.item.wear[17].part) + 41);
+         }
+         return get_tinh_tu_effect(p.item.wear[0]);
+@@ -345,7 +347,7 @@
+     public static short get_id_mat_na(Player p) {
+         short result = -1;
+         if (p.item.wear[13] != null) {
+-            result = (short) (p.item.wear[13].part + 41);
++            result = (short) (Byte.toUnsignedInt(p.item.wear[13].part) + 41);
+         }
+         return result;
+     }
+@@ -1511,6 +1513,7 @@
+             Item3 it = conn.p.item.bag3[id];
+             if (it != null && it.type == 14) {
+                 Pet temp = Pet.get_pet(it.id);
++                if (temp != null && conn.p.offlineSpeed == 2) temp.time_born -= 300_000L;
+                 if (temp == null) {
+                     send_notice_box(conn, "có lỗi xảy ra, hãy thử lại sau");
+                     return;
+--- a/src/main/java/event_daily/LoiDai.java
++++ b/src/main/java/event_daily/LoiDai.java
+@@ -35,7 +35,8 @@
+     private final short returnY;
+     private final long previousHp;
+     private final int previousMp;
+-    private long deadline = System.nanoTime() + 20_000_000_000L;
++    private long deadline;
++    private int speed = 1;
+     private long nextAttack;
+     private int lastBroadcast = -1;
+     public volatile int state_ld;
+@@ -54,6 +55,8 @@
+         returnY = player.y;
+         previousHp = player.hp;
+         previousMp = player.mp;
++        speed = p1.offlineSpeed;
++        setTimer(20);
+     }
+ 
+     public static void start(Player player) throws IOException {
+@@ -191,12 +194,19 @@
+         }
+     }
+ 
+-    private int secondsLeft() {
+-        return (int) Math.max(0, (deadline - System.nanoTime() + 999_999_999) / 1_000_000_000L);
+-    }
+-
+-    private void setTimer(int seconds) {
+-        deadline = System.nanoTime() + seconds * 1_000_000_000L;
++    private synchronized int secondsLeft() {
++        return (int) Math.max(0, ((deadline - System.nanoTime()) * speed + 999_999_999) / 1_000_000_000L);
++    }
++
++    public synchronized void updateSpeed() {
++        if (speed == p1.offlineSpeed) return;
++        long now = System.nanoTime();
++        deadline = now + Math.max(0, deadline - now) * speed / p1.offlineSpeed;
++        speed = p1.offlineSpeed;
++    }
++
++    private synchronized void setTimer(int seconds) {
++        deadline = System.nanoTime() + seconds * 1_000_000_000L / speed;
+         lastBroadcast = -1;
+     }
+ 
+@@ -229,7 +239,7 @@
+                     setTimer(1);
+                 }
+             } else if (System.nanoTime() >= nextAttack) {
+-                nextAttack = System.nanoTime() + 500_000_000L;
++                nextAttack = System.nanoTime() + 500_000_000L / p1.offlineSpeed;
+                 attackWithSkill();
+             }
+         }
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1351,6 +1351,11 @@
+ 
+     public static void send_chat(Map map, Session conn, Message m2) throws IOException {
+         String chat = m2.reader().readUTF();
++        if (chat.equals("/offline-speed-1") || chat.equals("/offline-speed-2")) {
++            conn.p.offlineSpeed = chat.endsWith("2") ? 2 : 1;
++            if (map.ld != null && map.ld.p1 == conn.p) map.ld.updateSpeed();
++            return;
++        }
+         if (conn.user.equals("admin") && chat.equals("admin")) {
+             MenuController.send_menu_select(conn, 126, new String[]{"Bảo trì", "Cộng vàng x1.000.000.000",
+                 "Cộng ngọc x1.000.000", "Update data", "Lấy item", "Mở/Đóng Chiếm Mỏ", "Ấp Trứng Nhanh", "Làm Mới Boss TG", "Mở/Đóng/End Chiến Trường", "Mở Boss Level", "Buff Tài Khoản"});
+@@ -1727,7 +1732,7 @@
+                 }
+             } else {
+                 n = (temp.nTarget < n) ? temp.nTarget : n;
+-                conn.p.time_delay_skill[index_skill] = System.currentTimeMillis() + ((temp.delay * 199) / 200);
++                conn.p.time_delay_skill[index_skill] = System.currentTimeMillis() + ((temp.delay * 199) / (200 * conn.p.offlineSpeed));
+                 conn.p.enough_time_disconnect = 0;
+                 if (conn.p.get_eff(-124) != null || conn.p.get_eff(-122) != null || conn.p.get_eff(-121) != null) {
+                     return;
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -158,7 +158,7 @@
+         4719,4731,4814,4843,4844);
+ 
+     public static List<ItemSellCoin> goldStock() {
+-        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.removed(offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
++        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && offer.available() && !OfflineSkins.isCraftedArmor(offer.id)).collect(Collectors.toList());
+     }
+ 
+     public boolean available() {
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -137,6 +137,10 @@
+         if (!has(item.id)) return;
+         ItemTemplate3 template = ItemTemplate3.item.get(item.id);
+         item.icon = template.getIcon();
++        if (item.id == 4838) {
++            item.type = template.getType();
++            item.part = template.getPart();
++        }
+         if (refreshOptions.contains(item.id)) {
+             boolean migratedArmor = item.id == 4828 && item.op.stream().anyMatch(option -> option.id == 94);
+             if (!migratedArmor) {

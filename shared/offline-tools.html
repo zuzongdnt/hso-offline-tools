@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dữ liệu HSO Offline</title>
+<style>
+body{font:17px system-ui,sans-serif;background:#f7f2e7;color:#302519;margin:0;padding:24px;line-height:1.5}main{max-width:620px;margin:auto}h1{font-size:25px}h2{font-size:20px;margin-top:30px}button,a.action{font:inherit;display:inline-block;background:#684326;color:white;border:0;border-radius:8px;padding:12px 18px;text-decoration:none;margin:6px 6px 6px 0}input{font:inherit;max-width:100%;margin:10px 0}#status{white-space:pre-wrap}button:disabled{opacity:.5}a{color:#684326}
+</style>
+<main><h1>Dữ liệu HSO Offline</h1>
+<p>Phiên bản __VERSION__ · PC, Android và iPhone dùng chung file sao lưu.</p>
+<h2>Sao lưu</h2><p>File gồm tài khoản, nhân vật, hành trang, pet và bang hội. Giữ file ở nơi riêng tư.</p>
+<a class="action" href="/export?token=__TOKEN__" download="HSO.hsosave">Xuất file sao lưu</a>
+<h2>Khôi phục</h2><p>Chọn file <b>.hsosave</b> từ thiết bị khác. Khôi phục sẽ thay dữ liệu hiện tại. Game giữ một bản dữ liệu cũ trước khi nhập.</p>
+<p>Tên đăng nhập trùng với tài khoản trên máy sẽ giữ mật khẩu đang dùng. Với tên đăng nhập khác, dùng tên và mật khẩu từ lúc tạo bản sao lưu.</p>
+<input id="save" type="file" accept=".hsosave,application/octet-stream,application/json" aria-label="File sao lưu"><br>
+<button id="restore">Nhập file</button><p id="status" role="status">__RESTORE_RESULT__</p>
+<h2>Cập nhật</h2><p id="release" role="status">Đang kiểm tra GitHub Releases…</p><div id="downloads"></div>
+<p id="install"></p>
+<p>Nguồn: <a href="https://www.tiktok.com/@thinhdzuong">TikTok @thinhdzuong</a><br>
+Góp ý và hỗ trợ: <a href="mailto:zuzong68@gmail.com">zuzong68@gmail.com</a></p></main>
+<script>
+const token='__TOKEN__', currentVersion=Number('__VERSION__'), status=document.getElementById('status');
+document.getElementById('restore').onclick=async()=>{
+ const file=document.getElementById('save').files[0];
+ if(!file){status.textContent='Hãy chọn file sao lưu.';return;}
+ if(file.size>32*1024*1024){status.textContent='File vượt quá 32 MB.';return;}
+ if(!confirm('Khôi phục dữ liệu từ '+file.name+'? Dữ liệu đang có sẽ được sao lưu rồi thay bằng file này khi mở lại game.'))return;
+ const button=document.getElementById('restore');button.disabled=true;
+ try{const response=await fetch('/import',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-HSO-Token':token},body:file});status.textContent=await response.text();}
+ catch(error){status.textContent='Chưa gửi được file. Hãy mở lại trang và thử lại.';}
+ finally{button.disabled=false;}
+};
+async function release(){
+ try{
+  const data=await (await fetch('/updates?token='+token)).json();
+  const text=document.getElementById('release');
+  if(!data.version){text.textContent='Chưa lấy được thông tin cập nhật. Game sẽ kiểm tra lại khi mở lần sau.';return;}
+  text.textContent=data.version>currentVersion?'Có bản mới '+data.version+'.':'Đang dùng bản mới nhất.';
+  if(data.version<=currentVersion)return;
+  const platform=/Android/i.test(navigator.userAgent)?'android':/iPhone|iPad/i.test(navigator.userAgent)?'ios':'pc';
+  const item=data[platform];
+  if(!item || !item.url || !item.url.startsWith('https://github.com/zuzongdnt/hso-offline-tools/releases/download/'))throw Error('Địa chỉ cập nhật không hợp lệ');
+  if(platform==='pc'){
+   const button=document.createElement('button');button.textContent='Cập nhật ngay';
+   button.onclick=async()=>{button.disabled=true;try{const response=await fetch('/install-pc',{method:'POST',headers:{'X-HSO-Token':token}});document.getElementById('install').textContent=await response.text();}catch(error){document.getElementById('install').textContent='Chưa mở được trình cập nhật.';}finally{button.disabled=false;}};
+   document.getElementById('downloads').append(button);
+  }else{
+   const link=document.createElement('a');link.className='action';link.href=item.url;link.textContent='Tải bản cập nhật';document.getElementById('downloads').append(link);
+  }
+  document.getElementById('install').textContent=platform==='ios'?'Sau khi tải IPA, ký và cài đè bằng iLoader.':platform==='android'?'Sau khi tải, Android sẽ hỏi xác nhận cài cập nhật.':'Trình cập nhật sẽ tải file, sao lưu và cài bản mới sau khi bạn xác nhận.';
+ }catch(error){document.getElementById('release').textContent='Chưa kiểm tra được bản cập nhật.';}
+}release();
+</script></html>

@@ -1,0 +1,477 @@
+--- a/src/main/java/client/MessageHandler.java
++++ b/src/main/java/client/MessageHandler.java
+@@ -566,7 +566,11 @@
+ 
+                     p0.set_in4();
+                     conn.p = p0;
+-                    if (template.OfflineSkins.grant(p0)) p0.flush();
++                    if (template.OfflineSkins.grant(p0)) {
++                        p0.flush();
++                        p0.item.char_inventory(4);
++                        p0.item.char_inventory(3);
++                    }
+                     MessageHandler.dataloginmap(conn);
+                 } else {
+                     System.out.println("setup FAILED for player id=" + id_player_login);
+--- a/src/main/java/client/Player.java
++++ b/src/main/java/client/Player.java
+@@ -40,6 +40,7 @@
+ import template.LvSkill;
+ import template.Mob_MoTaiNguyen;
+ import template.Option;
++import template.OfflineSkins;
+ import template.Part_fashion;
+ import template.Part_player;
+ import template.Pet_di_buon;
+@@ -191,6 +192,7 @@
+     public HashMap<Integer, Boolean> other_player_inside;
+     public HashMap<Integer, Boolean> other_mob_inside;
+     public HashMap<Integer, Boolean> other_mob_inside_update;
++    public int pendingHeroArmor = -1;
+     public byte type_use_mount;
+     public short id_item_rebuild;
+     public boolean is_use_mayman;
+@@ -481,6 +483,7 @@
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
+                 temp.restoreAchievementCloakOptions();
++                OfflineSkins.refreshIcon(temp);
+                 item.bag3[i] = temp;
+             }
+             jsar.clear();
+@@ -519,6 +522,7 @@
+                 }
+                 temp.time_use = 0;
+                 temp.restoreAchievementCloakOptions();
++                OfflineSkins.refreshIcon(temp);
+                 item.wear[Byte.parseByte(jsar2.get(9).toString())] = temp;
+             }
+             jsar.clear();
+@@ -608,6 +612,7 @@
+                     temp.time_use = Long.parseLong(jsar2.get(10).toString());
+                 }
+                 temp.restoreAchievementCloakOptions();
++                OfflineSkins.refreshIcon(temp);
+                 item.box3[i] = temp;
+             }
+             jsar.clear();
+@@ -1664,19 +1669,24 @@
+     }
+ 
+     public void down_mount(Message m2) throws IOException {
+-        byte type = m2.reader().readByte();
+-        if (type == -1) {
+-            Message m = new Message(-97);
+-            m.writer().writeByte(0);
+-            m.writer().writeByte(-1);
+-            m.writer().writeShort(this.id);
+-            MapService.send_msg_player_inside(this.map, this, m, true);
+-            m.cleanup();
+-            this.type_use_mount = -1;
+-            this.id_horse = -1;
+-            MapService.update_in4_2_other_inside(this.map, this);
+-            Service.send_char_main_in4(this);
+-        }
++        if (m2.reader().readByte() == -1) dismount();
++    }
++
++    public void dismount() throws IOException {
++        Item3 equipped = item.wear[OfflineSkins.MOUNT_SLOT];
++        if (OfflineSkins.equippedMount(this) != null) {
++            if (item.get_bag_able() <= 0 || !item.add_item_bag3(equipped)) {
++                Service.send_notice_box(conn, "Cần ô trống trong hành trang để tháo thú cưỡi.");
++                return;
++            }
++            item.wear[OfflineSkins.MOUNT_SLOT] = null;
++            item.char_inventory(3);
++            Service.send_wear(this);
++        }
++        type_use_mount = -1;
++        id_horse = -1;
++        map.send_mount(this);
++        MapService.update_in4_2_other_inside(map, this);
+     }
+ 
+     public void rest_skill_point() throws IOException {
+@@ -1805,6 +1815,10 @@
+                 b = 19;
+                 break;
+             }
++            case OfflineSkins.MOUNT_ITEM: {
++                b = OfflineSkins.MOUNT_SLOT;
++                break;
++            }
+         }
+         if (b == -1) {
+             Service.send_notice_box(conn, "Có lỗi xảy ra, hãy thử lại");
+@@ -1823,6 +1837,13 @@
+                 if (!item.add_item_bag3(buffer)) {
+                     Service.send_notice_box(conn, "Hành trang và rương đồ đã đầy! Không thể tháo vật phẩm ra túi đồ.");
+                 }
++            }
++        }
++        if (b == OfflineSkins.MOUNT_SLOT) {
++            OfflineSkins.Mount mount = OfflineSkins.equippedMount(this);
++            if (mount != null) {
++                mount.ride(this);
++                map.send_mount(this);
+             }
+         }
+         if (b == 11) {
+@@ -2135,6 +2156,8 @@
+         fusion_material_medal_id = -1;
+         id_remove_time_use = -1;
+         id_horse = -1;
++        OfflineSkins.Mount mount = OfflineSkins.equippedMount(this);
++        if (mount != null) mount.ride(this);
+         is_create_wing = false;
+         id_wing_split = -1;
+         in4_auto = new byte[]{0, 50, 50, 0, 0, 0, 0, 0, 0, 0, 0};
+--- a/src/main/java/client/Process_Yes_no_box.java
++++ b/src/main/java/client/Process_Yes_no_box.java
+@@ -39,6 +39,10 @@
+             type += 256;
+         }
+         byte value = m.reader().readByte(); // value
++        if (type == 198) {
++            template.HeroArmor.confirm(conn.p, value == 1);
++            return;
++        }
+         if (type == 199) {
+             conn.p.confirmSkillUpgrade(value == 1);
+             return;
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -23,6 +23,7 @@
+ import template.ItemTemplate7;
+ import template.Level;
+ import template.Option;
++import template.OfflineSkins;
+ import template.Pet_di_buon;
+ import template.Pet_di_buon_manager;
+ 
+@@ -33,6 +34,10 @@
+         if (conn.p.item.total_item_by_id(4, id) > 0) {
+             switch (ItemTemplate4.item.get(id).getType()) {
+                 case 44: {
++                    if (OfflineSkins.equippedMount(conn.p) != null) {
++                        Service.send_notice_box(conn, "Hãy xuống thú cưỡi đang trang bị trước.");
++                        return;
++                    }
+                     if (conn.p.id_horse != -1) {
+                         conn.p.id_horse = -1;
+                         MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+@@ -763,13 +768,11 @@
+     }
+ 
+     private static void use_item_mount(Session conn, short id) throws IOException {
+-        Short effect = template.OfflineSkins.mountEffect(id);
+-        if (effect != null) {
+-            conn.p.type_use_mount = 20;
+-            conn.p.id_horse = effect;
++        OfflineSkins.Mount appearance = OfflineSkins.mount(id);
++        if (appearance != null) {
++            appearance.ride(conn.p);
+             conn.p.map.send_mount(conn.p);
+             MapService.update_in4_2_other_inside(conn.p.map, conn.p);
+-            Service.send_char_main_in4(conn.p);
+             return;
+         }
+         switch (id) {
+@@ -1160,6 +1163,7 @@
+                     case 24:
+                     case 25:
+                     case 26:
++                    case OfflineSkins.MOUNT_ITEM:
+                     case 27: // danh hieu
+                     case 11: { // weapon
+                         conn.p.player_wear(conn, temp3, id, index);
+--- a/src/main/java/core/Manager.java
++++ b/src/main/java/core/Manager.java
+@@ -429,6 +429,7 @@
+         rs.close();
+         //
+         template.OfflineSkins.loadItems();
++        template.HeroArmor.installMaterials();
+         item7sell = template.ItemSellCoin.configure(item7sell);
+         System.out.println("item loaded!");
+         // load mob temp
+--- a/src/main/java/core/MenuController.java
++++ b/src/main/java/core/MenuController.java
+@@ -116,9 +116,9 @@
+             } // Alisama
+             case -5: { // Hammer
+                 if (conn.p.dropnlmd == 1) {
+-                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Tắt NLMD", "Đồ tinh tú"};
++                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Tắt NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi"};
+                 } else {
+-                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Mở NLMD", "Đồ tinh tú"};
++                    menu = new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Chỉ Số Sát Thương", "Mở NLMD", "Đồ tinh tú", "Chế tạo giáp Siêu nhân", "Tháo thú cưỡi"};
+                 }
+                 break;
+             }
+@@ -374,6 +374,9 @@
+                 }
+                 break;
+             }
++            case 1302:
++                template.HeroArmor.request(conn.p, index);
++                break;
+             case 1301:
+                 if (index >= 0 && index < 6) Service.send_box_UI(conn, 39 + index);
+                 break;
+@@ -3443,6 +3446,12 @@
+                         new String[]{"Chiến Binh", "Sát Thủ", "Pháp Sư", "Xạ Thủ", "Nâng cấp đồ tinh tú"});
+                 break;
+             }
++            case 7:
++                if (template.HeroArmor.available()) send_menu_select(conn, 1302, template.HeroArmor.choices());
++                break;
++            case 8:
++                conn.p.dismount();
++                break;
+             default: {
+                 Service.send_notice_box(conn, "Chưa có chức năng");
+                 break;
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -48,7 +48,13 @@
+                 MapService.change_flag(map, p, -1);
+             }
+             map.send_map_data(p);
+-            Service.send_char_main_in4(p);
++            template.OfflineSkins.Mount mount = template.OfflineSkins.equippedMount(p);
++            if (mount != null && !p.is_detu_training) {
++                mount.ride(p);
++                map.send_mount(p);
++            } else {
++                Service.send_char_main_in4(p);
++            }
+             Service.send_combo(p.conn);
+             Service.send_point_pk(p);
+             Service.send_health(p);
+@@ -2877,7 +2883,7 @@
+         m.writer().writeByte(1); // type main object
+         MapService.send_msg_player_inside(map, p, m, true);
+         m.cleanup();
+-        if ( p.type_use_mount != 10) {
++        if (p.type_use_mount != 10 && template.OfflineSkins.equippedMount(p) == null) {
+         p.type_use_mount = -1;
+         }}
+ 
+--- /dev/null
++++ b/src/main/java/template/HeroArmor.java
+@@ -0,0 +1,77 @@
++package template;
++
++import client.Player;
++import core.Service;
++import java.io.IOException;
++
++public final class HeroArmor {
++    public static final short FIRST_MATERIAL = 474;
++    private static final short FIRST_ARMOR = 4827;
++    private static final int MATERIAL_COUNT = 500;
++    private static final int GOLD = 2_000_000;
++    private static final String[] COLORS = {"bạc", "tím", "xanh", "vàng"};
++    private static final short[] ICONS = {267, 265, 266, 264};
++
++    private HeroArmor() {}
++
++    public static boolean available() {
++        return OfflineSkins.isCraftedArmor(FIRST_ARMOR);
++    }
++
++    public static void installMaterials() throws IOException {
++        if (!available()) return;
++        if (ItemTemplate7.item.size() != FIRST_MATERIAL) throw new IOException("Unexpected armor material IDs");
++        for (int i = 0; i < COLORS.length; i++) {
++            ItemTemplate7 item = new ItemTemplate7();
++            item.setId((short) (FIRST_MATERIAL + i));
++            item.setIcon(ICONS[i]);
++            item.setName(materialName(i));
++            item.setContent("Nguyên liệu chế tạo giáp siêu nhân " + COLORS[i] + ".");
++            item.setPrice(40_000);
++            item.setType((byte) 19);
++            item.setValue((short) 1);
++            ItemTemplate7.item.add(item);
++        }
++    }
++
++    public static String[] choices() {
++        return java.util.Arrays.stream(COLORS).map(color -> "Giáp siêu nhân " + color).toArray(String[]::new);
++    }
++
++    private static String materialName(int color) {
++        return "Hồ quang " + COLORS[color];
++    }
++
++    public static void request(Player player, int color) throws IOException {
++        player.pendingHeroArmor = -1;
++        if (!available() || color < 0 || color >= COLORS.length) return;
++        player.pendingHeroArmor = color;
++        int owned = player.item.total_item_by_id(7, FIRST_MATERIAL + color);
++        Service.send_box_input_yesno(player.conn, 198, "Chế tạo giáp siêu nhân " + COLORS[color]
++                + "?\n" + materialName(color) + " " + owned + "/" + MATERIAL_COUNT
++                + "\nPhí chế tạo 2.000.000 vàng.");
++    }
++
++    public static synchronized void confirm(Player player, boolean accepted) throws IOException {
++        int color = player.pendingHeroArmor;
++        player.pendingHeroArmor = -1;
++        if (!accepted || !available() || color < 0 || color >= COLORS.length) return;
++        short ingredient = (short) (FIRST_MATERIAL + color);
++        if (player.item.total_item_by_id(7, ingredient) < MATERIAL_COUNT || player.get_vang() < GOLD) {
++            Service.send_notice_box(player.conn, "Cần 500 " + materialName(color) + " và 2.000.000 vàng.");
++            return;
++        }
++        if (player.item.get_bag_able() <= 0) {
++            Service.send_notice_box(player.conn, "Cần ô trống trong hành trang.");
++            return;
++        }
++        int id = FIRST_ARMOR + color;
++        Item3 armor = ItemSellCoin.entry.stream().filter(offer -> offer.id == id).findFirst().orElseThrow().createItem();
++        if (!player.item.add_item_bag3(armor)) return;
++        player.item.remove(7, ingredient, MATERIAL_COUNT);
++        player.update_vang(-GOLD);
++        player.item.char_inventory(7);
++        player.item.char_inventory(3);
++        Service.send_notice_box(player.conn, "Chế tạo thành công " + armor.name + ".");
++    }
++}
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -157,7 +157,7 @@
+         4719,4731);
+ 
+     public static List<ItemSellCoin> goldStock() {
+-        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id)).toList();
++        return entry.stream().filter(offer -> !REMOVED_GOLD_STOCK.contains((int)offer.id) && !OfflineSkins.isCraftedArmor(offer.id)).toList();
+     }
+ 
+     public boolean available() {
+@@ -165,7 +165,7 @@
+     }
+ 
+     private static boolean cosmetic(int type) {
+-        return type == 15 || (type >= 21 && type <= 27);
++        return type == 15 || (type >= 21 && type <= 27) || type == OfflineSkins.MOUNT_ITEM;
+     }
+ 
+     public Item3 createItem() {
+@@ -242,6 +242,8 @@
+         java.util.Set<Short> materials = new java.util.LinkedHashSet<>();
+         for (short id : materialIds) materials.add(id);
+         for (short id : new short[]{0, 1, 2, 3}) materials.add(id);
++        for (short id = HeroArmor.FIRST_MATERIAL; id < HeroArmor.FIRST_MATERIAL + 4 && id < ItemTemplate7.item.size(); id++)
++            materials.add(id);
+         // Native medal materials: level 1 occupies IDs 46 through 145.
+         for (short id = 46; id <= 145; id++) materials.add(id);
+         for (short id : LEVEL5_GEMS) {
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -16,7 +16,17 @@
+ public final class OfflineSkins {
+     private static final Set<Short> items = new HashSet<>();
+     private static final Set<Short> newItems = new HashSet<>();
+-    private static final java.util.Map<Short, Short> mountEffects = new java.util.LinkedHashMap<>();
++    public static final byte MOUNT_ITEM = 30;
++    public static final int MOUNT_SLOT = 22;
++    private static final java.util.Map<Short, Mount> mounts = new java.util.LinkedHashMap<>();
++    private static final java.util.Map<Short, Mount> wearableMounts = new java.util.LinkedHashMap<>();
++
++    public record Mount(short effect, byte pose, Short wearId) {
++        public void ride(Player player) {
++            player.type_use_mount = pose;
++            player.id_horse = effect;
++        }
++    }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+     private static JSONArray catalog = new JSONArray();
+ 
+@@ -53,14 +63,14 @@
+     }
+ 
+     private static void loadMounts() throws IOException {
+-        JSONArray mounts;
++        JSONArray rows;
+         try {
+-            mounts = (JSONArray) JSONValue.parse(new String(
++            rows = (JSONArray) JSONValue.parse(new String(
+                     Util.loadfile("data/offline-mounts.json"), StandardCharsets.UTF_8));
+         } catch (FileNotFoundException missing) {
+             return;
+         }
+-        for (Object entry : mounts) {
++        for (Object entry : rows) {
+             JSONObject row = (JSONObject) entry;
+             short id = number(row, "id").shortValue();
+             if (id != ItemTemplate4.item.size()) throw new IOException("Unexpected mount ID " + id);
+@@ -73,16 +83,28 @@
+             mount.setValue((short) 1);
+             mount.setPrice(1_000_000);
+             ItemTemplate4.item.add(mount);
+-            mountEffects.put(id, number(row, "effect").shortValue());
++            Short wearId = row.containsKey("wearId") ? number(row, "wearId").shortValue() : null;
++            Mount appearance = new Mount(number(row, "effect").shortValue(), (byte) (24 + mounts.size()), wearId);
++            mounts.put(id, appearance);
++            if (wearId != null) wearableMounts.put(wearId, appearance);
+         }
+     }
+ 
+-    public static Short mountEffect(short id) {
+-        return mountEffects.get(id);
++    public static Mount mount(short id) {
++        return mounts.get(id);
++    }
++
++    public static Mount equippedMount(Player player) {
++        Item3 item = player.item.wear[MOUNT_SLOT];
++        return item == null ? null : wearableMounts.get(item.id);
+     }
+ 
+     public static Set<Short> newMounts() {
+-        return java.util.Collections.unmodifiableSet(mountEffects.keySet());
++        return java.util.Collections.unmodifiableSet(mounts.keySet());
++    }
++
++    public static void refreshIcon(Item3 item) {
++        if (has(item.id)) item.icon = ItemTemplate3.item.get(item.id).getIcon();
+     }
+ 
+     public static void loadFashion() {
+@@ -105,7 +127,7 @@
+ 
+     public static boolean grant(Player player) {
+         int previous = player.point_active[6];
+-        int release = newItems.isEmpty() ? 1 : 2;
++        int release = wearableMounts.isEmpty() ? (newItems.isEmpty() ? 1 : 2) : 3;
+         if (!"zuzong".equalsIgnoreCase(player.name) || items.isEmpty() || previous >= release) return false;
+         Set<Short> owned = new HashSet<>();
+         for (Item3[] group : new Item3[][] {player.item.bag3, player.item.wear, player.item.box3}) {
+@@ -113,13 +135,13 @@
+         }
+         var outfits = ItemSellCoin.entry.stream()
+                 .filter(offer -> !owned.contains(offer.id))
+-                .filter(offer -> newItems.contains(offer.id) || previous == 0 && has(offer.id)
+-                        || release == 2 && isOriginalWeaponSkin(offer.id))
++                .filter(offer -> wearableMounts.containsKey(offer.id) || previous == 0 && has(offer.id) && !isCraftedArmor(offer.id)
++                        || previous < 2 && (newItems.contains(offer.id) || isOriginalWeaponSkin(offer.id)))
+                 .toList();
+         var mounts = new ArrayList<Short>();
+         if (previous == 0) for (short id : ItemSellCoin.MOUNTS)
+             if (player.item.total_item_by_id(4, id) == 0) mounts.add(id);
+-        for (short id : newMounts())
++        if (previous < 2) for (short id : newMounts())
+             if (player.item.total_item_by_id(4, id) == 0) mounts.add(id);
+         if (player.item.get_bag_able() < outfits.size() + mounts.size()) return false;
+         for (ItemSellCoin outfit : outfits) player.item.add_item_bag3(outfit.createItem());
+@@ -134,6 +156,8 @@
+         return true;
+     }
+ 
++    public static boolean isCraftedArmor(short id) { return id >= 4827 && id <= 4830 && has(id); }
++
+     private static boolean isOriginalWeaponSkin(short id) {
+         ItemTemplate3 item = ItemTemplate3.item.get(id);
+         return item.getType() == 24 && ORIGINAL_WEAPON_EFFECTS.contains(Byte.toUnsignedInt(item.getPart()) + 41);

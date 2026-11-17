@@ -1,0 +1,44 @@
+name: Build iOS offline world
+on:
+  workflow_dispatch:
+jobs:
+  world:
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Gluon GraalVM
+        uses: gluonhq/setup-graalvm@3a9b11a45ef0ecad69107f5884b5dbbb7b806e1c
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          graalvm: '22.1.0.1-Final'
+          jdk: java17
+          arch: aarch64
+      - name: Build embedded server
+        run: mvn -B -DskipTests package gluonfx:sharedlib
+      - name: Check arm64 library
+        shell: bash
+        run: |
+          library="$(find target/gluonfx -name '*.dylib' -type f | head -n 1)"
+          test -n "$library"
+          file "$library"
+          lipo "$library" -verify_arch arm64
+          otool -L "$library"
+          if nm -u "$library" | grep -q '_JVM_'; then
+            echo "Unresolved JVM support functions"
+            exit 1
+          fi
+          mkdir -p artifact
+          cp "$library" artifact/HSOOfflineWorld.dylib
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-offline-world
+          path: |
+            artifact/HSOOfflineWorld.dylib
+            target/gluonfx/**/*.dylib
+            target/gluonfx/**/log/*
+          retention-days: 7

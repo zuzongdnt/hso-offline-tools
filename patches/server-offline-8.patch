@@ -1,0 +1,337 @@
+--- a/src/main/java/client/UseItem.java
++++ b/src/main/java/client/UseItem.java
+@@ -763,6 +763,15 @@
+     }
+ 
+     private static void use_item_mount(Session conn, short id) throws IOException {
++        Short effect = template.OfflineSkins.mountEffect(id);
++        if (effect != null) {
++            conn.p.type_use_mount = 20;
++            conn.p.id_horse = effect;
++            conn.p.map.send_mount(conn.p);
++            MapService.update_in4_2_other_inside(conn.p.map, conn.p);
++            Service.send_char_main_in4(conn.p);
++            return;
++        }
+         switch (id) {
+             case 62:
+             case 63:
+--- a/src/main/java/core/GameSrc.java
++++ b/src/main/java/core/GameSrc.java
+@@ -1053,26 +1053,7 @@
+                             itbag.op.add(new Option(129, 10_000));
+                             itbag.op.add(new Option(130, Util.random(1, 901)));
+                         }
+-                        int[] hiddenIds = switch (index_create) {
+-                            case 1 -> new int[]{154, 143, 151};
+-                            case 2, 3 -> new int[]{147, 148, 149, 146, 145};
+-                            case 7 -> new int[]{155, 143, 170, 172, 174, 176};
+-                            case 6 -> new int[]{167, 169, 152, 170, 172, 174, 176};
+-                            case 0 -> new int[]{169, 151, 153, 165};
+-                            case 5 -> new int[]{167, 153, 165};
+-                            case 4 -> new int[]{152, 153, 165};
+-                            default -> throw new IllegalArgumentException("Invalid Tinh Tu slot");
+-                        };
+-                        int hiddenCount = color_ == 4 ? Util.random(3) : color_ == 5 ? Util.random(4) : 0;
+-                        for (int i = 0; i < hiddenCount; i++) {
+-                            int pick = Util.random(i, hiddenIds.length);
+-                            int optionId = hiddenIds[pick];
+-                            hiddenIds[pick] = hiddenIds[i];
+-                            hiddenIds[i] = optionId;
+-                            int value = OptionItem.entrys.get(optionId).getIspercent() == 2
+-                                    ? 60_000 : Util.random(10, 300);
+-                            itbag.op.add(new Option(optionId, value));
+-                        }
++                        TinhTu.addHiddenOptions(itbag, 0, true);
+ 
+ 						itbag.time_use = 0;
+ 						conn.p.item.add_item_bag3(itbag);
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -29,6 +29,7 @@
+ import template.Option_pet;
+ import template.Pet_di_buon;
+ import template.Pet_di_buon_manager;
++import template.TinhTu;
+ 
+ 
+ public class Service {
+@@ -280,7 +281,7 @@
+ 
+     public static short get_id_weapon(Player p) {
+         if (p.item.wear[17] != null) {
+-            return (short) (p.item.wear[17].part + 41);
++            return (short) (Byte.toUnsignedInt(p.item.wear[17].part) + 41);
+         }
+         return get_tinh_tu_effect(p.item.wear[0]);
+     }
+@@ -455,7 +456,7 @@
+                 m.writer().writeByte(temp.tier); // plus item (tier)
+                 m.writer().writeShort(temp.level);
+                 m.writer().writeByte(temp.color);
+-                temp.writeItemOptions(m, p.clazz);
++                temp.writeItemOptions(m, p.clazz, TinhTu.groupIsComplete(p.item.wear, i));
+                 m.writer().writeByte(1); // islock
+             } else {
+                 m.writer().writeByte(-1);
+@@ -775,7 +776,7 @@
+                         m2.writer().writeByte(temp.tier); // plus item = tier
+                         m2.writer().writeShort(temp.level);
+                         m2.writer().writeByte(temp.color);
+-                        temp.writeItemOptions(m2, p0.clazz);
++                        temp.writeItemOptions(m2, p0.clazz, TinhTu.groupIsComplete(p0.item.wear, i));
+                         m2.writer().writeByte(0); // can sell
+                     } else {
+                         m2.writer().writeByte(-1);
+@@ -892,8 +893,9 @@
+             case 38: {
+                 m.writer().writeUTF("Thú cưỡi - Vàng");
+                 m.writer().writeByte(0);
+-                m.writer().writeShort(ItemSellCoin.MOUNTS.length);
++                m.writer().writeShort(ItemSellCoin.MOUNTS.length + template.OfflineSkins.newMounts().size());
+                 for (short id : ItemSellCoin.MOUNTS) m.writer().writeShort(id);
++                for (short id : template.OfflineSkins.newMounts()) m.writer().writeShort(id);
+                 break;
+             }
+             case 33: {
+@@ -1853,7 +1855,6 @@
+                     }
+                     itbag.op = new ArrayList<>();
+                     itbag.op.addAll(opnew);
+-                    itbag.ensureShopSockets();
+                     p.item.add_item_bag3(itbag);
+                 }
+                 p.item.char_inventory(4);
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -2363,7 +2363,8 @@
+         }
+         int tylene = 80; // ty le hieu qua ne don
+ 
+-        if (!pierce) {
++        boolean trueDamage = TinhTu.rolls(p.body.get_equipment_effect(128));
++        if (!pierce && !trueDamage) {
+             int def = p0.body.get_def();
+             ef = p0.get_eff(15);
+             if (ef != null) {
+@@ -2375,11 +2376,11 @@
+                 dame = 1;
+             }
+         }
+-        long resist_dame = (dame * (p0.body.get_resist_dame(type_atk, p.clazz, p0) / 100)) / 500; // khang vat ly;
+-        resist_dame -= (resist_dame * tylene) / 100;
+-        dame -= resist_dame;
+-        if (dame < 0) {
+-            dame = 1;
++        if (!trueDamage) {
++            long resist_dame = (dame * (p0.body.get_resist_dame(type_atk, p.clazz, p0) / 100)) / 500;
++            resist_dame -= (resist_dame * tylene) / 100;
++            dame -= resist_dame;
++            if (dame < 0) dame = 1;
+         }
+ 
+         int miss = p0.body.get_miss();
+@@ -2940,7 +2941,7 @@
+                 pierce = true;
+             }
+         }
+-        if (!pierce) {
++        if (!pierce && !TinhTu.rolls(p.body.get_equipment_effect(128))) {
+             long dameresist = (mob.level * mob.level / 2);
+             if (mob.is_boss) {
+                 dameresist *= 2;
+--- a/src/main/java/template/Item3.java
++++ b/src/main/java/template/Item3.java
+@@ -111,6 +111,10 @@
+ 	}
+ 
+ 	public void writeItemOptions(Message m, byte playerClazz) throws IOException {
++		writeItemOptions(m, playerClazz, false);
++	}
++
++	public void writeItemOptions(Message m, byte playerClazz, boolean activeSet) throws IOException {
+ 		if (this.op == null || this.op.isEmpty()) {
+ 			m.writer().writeByte(0);
+ 			return;
+@@ -126,7 +130,9 @@
+ 		for (Option o : this.op) {
+ 			if (o != null && (type == 15 || (type >= 21 && type <= 27) || ItemSellCoin.isTinhTu(id)
+ 					|| !isHiddenElementalOption(o.id, playerClazz))) {
+-				m.writer().writeByte(o.id);
++				int id = Byte.toUnsignedInt(o.id);
++				m.writer().writeByte(ItemSellCoin.isTinhTu(this.id) && TinhTu.isHidden(id)
++						? TinhTu.displayedOption(id, activeSet) : id);
+ 				m.writer().writeInt(optionValue(o));
+ 			}
+ 		}
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -187,7 +187,6 @@
+             item.op = new ArrayList<>();
+             for (Option option : op) item.op.add(new Option(option.id, option.getParam(0)));
+         }
+-        item.ensureShopSockets();
+         return item;
+     }
+ 
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -15,6 +15,9 @@
+ /** Imports the private cosmetic catalog before character saves are read. */
+ public final class OfflineSkins {
+     private static final Set<Short> items = new HashSet<>();
++    private static final Set<Short> newItems = new HashSet<>();
++    private static final java.util.Map<Short, Short> mountEffects = new java.util.LinkedHashMap<>();
++    private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+     private static JSONArray catalog = new JSONArray();
+ 
+     public static void loadItems() throws IOException {
+@@ -44,7 +47,42 @@
+             }
+             if (!pumpkin) ItemTemplate3.item.add(item);
+             items.add(id);
++            if (row.containsKey("release")) newItems.add(id);
+         }
++        loadMounts();
++    }
++
++    private static void loadMounts() throws IOException {
++        JSONArray mounts;
++        try {
++            mounts = (JSONArray) JSONValue.parse(new String(
++                    Util.loadfile("data/offline-mounts.json"), StandardCharsets.UTF_8));
++        } catch (FileNotFoundException missing) {
++            return;
++        }
++        for (Object entry : mounts) {
++            JSONObject row = (JSONObject) entry;
++            short id = number(row, "id").shortValue();
++            if (id != ItemTemplate4.item.size()) throw new IOException("Unexpected mount ID " + id);
++            ItemTemplate4 mount = new ItemTemplate4();
++            mount.setId(id);
++            mount.setIcon(number(row, "icon").shortValue());
++            mount.setName((String) row.get("name"));
++            mount.setContent("Thú cưỡi vĩnh viễn.");
++            mount.setType((byte) 44);
++            mount.setValue((short) 1);
++            mount.setPrice(1_000_000);
++            ItemTemplate4.item.add(mount);
++            mountEffects.put(id, number(row, "effect").shortValue());
++        }
++    }
++
++    public static Short mountEffect(short id) {
++        return mountEffects.get(id);
++    }
++
++    public static Set<Short> newMounts() {
++        return java.util.Collections.unmodifiableSet(mountEffects.keySet());
+     }
+ 
+     public static void loadFashion() {
+@@ -66,14 +104,22 @@
+     public static boolean has(short id) { return items.contains(id); }
+ 
+     public static boolean grant(Player player) {
+-        if (!"zuzong".equalsIgnoreCase(player.name) || items.isEmpty() || player.point_active[6] != 0) return false;
++        int previous = player.point_active[6];
++        int release = newItems.isEmpty() ? 1 : 2;
++        if (!"zuzong".equalsIgnoreCase(player.name) || items.isEmpty() || previous >= release) return false;
+         Set<Short> owned = new HashSet<>();
+         for (Item3[] group : new Item3[][] {player.item.bag3, player.item.wear, player.item.box3}) {
+             for (Item3 item : group) if (item != null) owned.add(item.id);
+         }
+-        var outfits = ItemSellCoin.entry.stream().filter(offer -> has(offer.id) && !owned.contains(offer.id)).toList();
++        var outfits = ItemSellCoin.entry.stream()
++                .filter(offer -> !owned.contains(offer.id))
++                .filter(offer -> newItems.contains(offer.id) || previous == 0 && has(offer.id)
++                        || release == 2 && isOriginalWeaponSkin(offer.id))
++                .toList();
+         var mounts = new ArrayList<Short>();
+-        for (short id : ItemSellCoin.MOUNTS)
++        if (previous == 0) for (short id : ItemSellCoin.MOUNTS)
++            if (player.item.total_item_by_id(4, id) == 0) mounts.add(id);
++        for (short id : newMounts())
+             if (player.item.total_item_by_id(4, id) == 0) mounts.add(id);
+         if (player.item.get_bag_able() < outfits.size() + mounts.size()) return false;
+         for (ItemSellCoin outfit : outfits) player.item.add_item_bag3(outfit.createItem());
+@@ -81,9 +127,15 @@
+             Item47 mount = new Item47();
+             mount.id = id;
+             mount.quantity = 1;
++            mount.category = 4;
+             player.item.add_item_bag47(4, mount);
+         }
+-        player.point_active[6] = 1;
++        player.point_active[6] = release;
+         return true;
+     }
++
++    private static boolean isOriginalWeaponSkin(short id) {
++        ItemTemplate3 item = ItemTemplate3.item.get(id);
++        return item.getType() == 24 && ORIGINAL_WEAPON_EFFECTS.contains(Byte.toUnsignedInt(item.getPart()) + 41);
++    }
+ }
+--- a/src/main/java/template/TinhTu.java
++++ b/src/main/java/template/TinhTu.java
+@@ -81,11 +81,9 @@
+             item.part = t.getPart();
+             item.islock = true;
+             item.op = options(t, color, variant);
+-            if (color >= 3) {
+-                item.op.add(new Option(129,10000));
+-                item.op.add(new Option(130,100 * (color - 2)));
+-            }
++            addShopMetadata(item);
+             item.ensureShopSockets();
++            addHiddenOptions(item, variant, false);
+             return item;
+         }
+ 
+@@ -174,6 +172,46 @@
+         return result;
+     }
+ 
++    public static void addHiddenOptions(Item3 item, int variant, boolean crafted) {
++        if (item.color < 4) return;
++        int[] ids = switch (item.type) {
++            case 0, 1 -> new int[]{147, 148, 149, 146, 145};
++            case 2 -> new int[]{154, 143, 151};
++            case 3 -> new int[]{167, 153, 165};
++            case 4 -> new int[]{167, 169, 152, 170, 172, 174, 176};
++            case 5 -> new int[]{169, 151, 153, 165};
++            case 6 -> new int[]{152, 153, 165};
++            case 8, 9, 10, 11 -> new int[]{155, 143, 170, 172, 174, 176};
++            default -> throw new IllegalArgumentException("Invalid Tinh Tu type " + item.type);
++        };
++        int count = item.color == 4 ? 2 : 3;
++        if (crafted) count = Util.random(count + 1);
++        for (int i = 0; i < count; i++) {
++            int optionId;
++            if (crafted) {
++                int pick = Util.random(i, ids.length);
++                optionId = ids[pick];
++                ids[pick] = ids[i];
++            } else {
++                optionId = ids[(variant + i) % ids.length];
++            }
++            int chance = crafted ? Util.random(10, 300) : 100 + 25 * variant;
++            int value = optionId == 153 || optionId == 169 ? 60_000 : chance;
++            item.op.add(new Option(optionId, value));
++        }
++    }
++
++    public static int displayedOption(int id, boolean active) {
++        id = activeOption(id);
++        if (!active) return id;
++        if (id == 155) return 128;
++        if (id >= 143 && id <= 154) return id - 12;
++        return switch (id) {
++            case 165, 167, 169, 172, 174, 176 -> id - 1;
++            default -> id;
++        };
++    }
++
+     public static void addShopMetadata(Item3 item) {
+         if (item.color >= 3) {
+             item.op.add(new Option(129,10000));

@@ -1,0 +1,13 @@
+{
+  "resources": {
+    "includes": [
+      {"pattern":"META-INF/services/java.nio.file.spi.FileSystemProvider"},
+      {"pattern":"io/roastedroot/sqlite4j/SQLite.meta"},
+      {"pattern":"sqlite-jdbc.properties"},
+      {"pattern":"javax/sql/rowset/rowset[.]properties"}
+    ]
+  },
+  "bundles": [
+    {"name":"com.sun.rowset.RowSetResourceBundle"}
+  ]
+}

@@ -17,5 +17,25 @@ public class SQL {
     }
     public static synchronized SQL gI(){if(instance==null)instance=new SQL();return instance;}
     public Connection getConnection() throws SQLException{return SQLiteBridge.connection(database);}
+    public String exportSave() throws Exception {
+        database.beginTransactionNonExclusive();
+        try (Connection connection = getConnection()) {
+            String save = core.SaveTransfer.capture(connection);
+            database.setTransactionSuccessful();
+            return save;
+        } finally {
+            database.endTransaction();
+        }
+    }
+    public void importSave(String text) throws Exception {
+        core.SaveTransfer.validate(text);
+        database.beginTransaction();
+        try (Connection connection = getConnection()) {
+            core.SaveTransfer.replace(connection, text);
+            database.setTransactionSuccessful();
+        } finally {
+            database.endTransaction();
+        }
+    }
     public void close(){if(database.isOpen())database.close();is_connected=false;}
 }

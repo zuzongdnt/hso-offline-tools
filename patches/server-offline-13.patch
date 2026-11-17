@@ -1,0 +1,95 @@
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -30,6 +30,8 @@
+     }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+     private static JSONArray catalog = new JSONArray();
++    private static final Set<Short> refreshOptions = new HashSet<>();
++    private static final java.util.Map<Short, Short> transformEffects = new java.util.HashMap<>();
+     private static final java.util.Map<Short, Short> bodyEffects = new java.util.HashMap<>();
+ 
+     public static void loadItems() throws IOException {
+@@ -59,10 +61,21 @@
+             }
+             if (!pumpkin) ItemTemplate3.item.add(item);
+             items.add(id);
++            if (Boolean.TRUE.equals(row.get("refreshOptions"))) refreshOptions.add(id);
++            if (row.containsKey("transformEffect")) transformEffects.put(id, number(row, "transformEffect").shortValue());
+             if (row.containsKey("bodyEffect")) bodyEffects.put(id, number(row, "bodyEffect").shortValue());
+             if (row.containsKey("release")) itemReleases.put(id, number(row, "release").intValue());
+         }
+         loadMounts();
++        if (OptionItem.entrys.size() == 191) {
++            for (String name : new String[]{"Lời nguyền Độc tố", "Lời nguyền Suy kiệt"}) {
++                OptionItem option = new OptionItem();
++                option.setName(name);
++                option.setColor((byte) 4);
++                option.setIspercent((byte) 0);
++                OptionItem.entrys.add(option);
++            }
++        }
+     }
+ 
+     private static void loadMounts() throws IOException {
+@@ -110,6 +123,13 @@
+         if (!has(item.id)) return;
+         ItemTemplate3 template = ItemTemplate3.item.get(item.id);
+         item.icon = template.getIcon();
++        if (refreshOptions.contains(item.id)) {
++            boolean migratedArmor = item.id == 4828 && item.op.stream().anyMatch(option -> option.id == 94);
++            if (!migratedArmor) {
++                item.op.removeIf(option -> option.id < 58 || option.id > 60);
++                for (Option option : template.getOp()) item.op.add(new Option(option.id, option.getParam(0)));
++            }
++        }
+         if (item.type != EquippedEffects.LANTERN_TYPE && (item.id < 4807 || item.id > 4813)) return;
+         item.part = template.getPart();
+         for (Option current : template.getOp()) {
+@@ -123,6 +143,11 @@
+     public static short bodyEffect(Player player) {
+         Item3 costume = player.item.wear[11];
+         return costume == null ? -1 : bodyEffects.getOrDefault(costume.id, (short) -1);
++    }
++
++    public static short transformEffect(Player player) {
++        Item3 costume = player.item.wear[11];
++        return costume == null ? -1 : transformEffects.getOrDefault(costume.id, (short) -1);
+     }
+ 
+     public static void loadFashion() {
+--- a/src/main/java/core/Service.java
++++ b/src/main/java/core/Service.java
+@@ -227,8 +227,8 @@
+         m.writer().writeShort(get_id_wing(p)); // idWing
+         m.writer().writeShort(p.id_name); // idName
+         m.writer().writeShort(template.OfflineSkins.bodyEffect(p)); // idBody
+-        // m.writer().writeShort(-1); // idLeg
+-        // m.writer().writeShort(-1); // idBienhinh
++        m.writer().writeShort(-1); // idLeg
++        m.writer().writeShort(template.OfflineSkins.transformEffect(p)); // idBienhinh
+         //
+         p.conn.addmsg(m);
+         m.cleanup();
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -1611,7 +1611,7 @@
+             m.writer().writeShort(p0.id_name); // id_name
+             m.writer().writeShort(template.OfflineSkins.bodyEffect(p0)); // body
+             m.writer().writeShort(-1); // leg
+-            m.writer().writeShort(-1); // bienhinh
++            m.writer().writeShort(template.OfflineSkins.transformEffect(p0)); // bienhinh
+             p.conn.addmsg(m);
+             m.cleanup();
+             template.RankBadge.send(p, p0);
+--- a/src/main/java/template/HeroArmor.java
++++ b/src/main/java/template/HeroArmor.java
+@@ -67,6 +67,9 @@
+         }
+         int id = FIRST_ARMOR + color;
+         Item3 armor = ItemSellCoin.entry.stream().filter(offer -> offer.id == id).findFirst().orElseThrow().createItem();
++        if (id == 4828) {
++            for (Option option : armor.op) option.setParam(core.Util.random(1, 4) * 100);
++        }
+         if (!player.item.add_item_bag3(armor)) return;
+         player.item.remove(7, ingredient, MATERIAL_COUNT);
+         player.update_vang(-GOLD);

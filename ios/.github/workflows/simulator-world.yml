@@ -1,0 +1,46 @@
+name: Check iOS simulator world
+on:
+  workflow_dispatch:
+jobs:
+  startup:
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gluonhq/setup-graalvm@3a9b11a45ef0ecad69107f5884b5dbbb7b806e1c
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          graalvm: '22.1.0.1-Final'
+          jdk: java17
+          arch: x86_64
+      - name: Compile embedded server for iOS simulator
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if mvn -B -U -DskipTests -Dgluonfx.target=ios-sim package com.gluonhq:gluonfx-maven-plugin:1.0.29:sharedlib; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Download sanitized startup fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir fixture
+          gh release download ios-native-fixture-20261116 -p '*.zip' -D fixture
+          mv fixture/native-startup-fixture.zip fixture/offline-world.zip
+      - name: Boot iOS and start offline server
+        run: python3 ci/check_simulator_world.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-startup
+          path: |
+            simulator-startup.log
+            target/gluonfx/**/*.dylib
+            target/gluonfx/**/log/*
+          retention-days: 7

@@ -90,8 +90,8 @@ public class ShopCheck {
         Service.send_box_UI(conn,37);
         DataInputStream packet=new DataInputStream(new ByteArrayInputStream(conn.packet));
         check(packet.readUTF().contains("Vàng"));check(packet.readByte()==1);
-        check(packet.readUnsignedShort()==size);
-        for(ItemSellCoin offer:ItemSellCoin.entry) {
+        check(packet.readUnsignedShort()==ItemSellCoin.goldStock().size());
+        for(ItemSellCoin offer:ItemSellCoin.goldStock()) {
             check(packet.readShort()==offer.id);packet.readUTF();packet.readByte();packet.readByte();packet.readShort();
             check(packet.readLong()==offer.price);check(packet.readShort()==offer.createItem().level);check(packet.readByte()==offer.color);
             Message expected=new Message(0);offer.createItem().writeItemOptions(expected,buyer.clazz);
@@ -109,12 +109,15 @@ public class ShopCheck {
         buyer.item.bag3[0]=null;
         long before=buyer.gold;
         Service.buy_item(buyer,buy(1,4672,2));
-        check(buyer.gold==before-500000);
+        check(buyer.gold==before && buyer.item.bag3[0]==null);
+        TinhTu.Offer variant=TinhTu.offers(4).stream().filter(row->row.itemId()==4672).findFirst().orElseThrow();
+        Service.send_box_UI(conn,43);
+        Service.buy_item(buyer,buy(1,variant.key(),2));
+        check(buyer.gold==before-variant.price()*2);
         check(buyer.item.bag3[0].id==4672 && buyer.item.bag3[1].id==4672);
-        check(buyer.item.bag3[0].color==4 && buyer.item.bag3[0].level==45);
-        check(buyer.item.bag3[0].op.stream().anyMatch(o->Byte.toUnsignedInt(o.id)==155));
         check(buyer.item.bag3[0].op!=buyer.item.bag3[1].op);
         buyer.gold=0;
+        Service.send_box_UI(conn,37);
         Service.buy_item(buyer,buy(1,4755,1));
         check(buyer.item.bag3[2]==null && buyer.gold==0);
         buyer.gold=100000000;before=buyer.gold;
@@ -133,6 +136,10 @@ public class ShopCheck {
         check(packet.readUTF().contains("Vàng"));check(packet.readByte()==0);
         check(packet.readShort()==ItemSellCoin.MOUNTS.length);
         for(short mount:ItemSellCoin.MOUNTS) {check(packet.readShort()==mount);check(ItemTemplate4.item.get(mount).getPricetype()==0);}
+        Service.send_box_UI(conn,37);
+        before=buyer.gold;
+        Service.buy_item(buyer,buy(1,3269,1));
+        check(buyer.gold==before-150000 && buyer.item.bag3[2].id==3269);
         System.out.println("PASS: "+size+" offers, "+skins+" skins, "+ItemSellCoin.MOUNTS.length+" mount variants, 17 gems; preview matches purchased items, gold payment, quantity and failed purchases verified.");
     }
 }

@@ -1,0 +1,133 @@
+--- a/src/main/java/client/Pet.java
++++ b/src/main/java/client/Pet.java
+@@ -13,11 +13,12 @@
+     public static final byte TYPE_DAI_BANG = 3;
+     public static final short ID_DAI_BANG = 3269;
+     public static final short ID_CAT = 4831;
++    public static final short ID_LAN = 4865;
+     public static final int EAGLE_GOLD_MIN = 100;
+     public static final int EAGLE_GOLD_MAX = 3000;
+ 
+     public static String[] name_template = new String[]{"Cú", "Dơi", "Sói", "Đại Bàng", "Khỉ", "Rồng lửa", "Thỏ",
+-        "Phượng hoàng băng", "Zabivaka", "Bóng ma", "Dê con", "Yêu tinh", "Thiên thần", "Sao la", "Mèo"};
++        "Phượng hoàng băng", "Zabivaka", "Bóng ma", "Dê con", "Yêu tinh", "Thiên thần", "Sao la", "Mèo", "Lân"};
+     public static byte[] type_template = new byte[]{8, 13, 10, 11, 11, 11, 12, 12, 12, 9, 7, 7, 7, 6, 5, 5, 5, 4, 4, 4,
+         3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0};
+     public static byte[] icon_template = new byte[]{26, 41, 32, 33, 34, 35, 36, 37, 38, 29, 21, 22, 23, 20, 15, 16, 17,
+@@ -194,6 +195,14 @@
+                 maxdam_ = new int[]{0, 0, 0, 0, 4500, 200, 3, 2000};
+                 break;
+             }
++            case ID_LAN: {
++                temp.icon = 61;
++                temp.type = 15;
++                id_ = new byte[]{23, 24, 25, 26, 1};
++                param_ = new int[]{1, 1, 1, 1, 26355};
++                maxdam_ = new int[]{0, 0, 0, 0, 31626};
++                break;
++            }
+             case ID_CAT:
+             case 4768: {
+                 temp.icon = (byte) (id == ID_CAT ? 45 : 39);
+@@ -219,7 +228,7 @@
+         temp.point1 = temp.point2 = temp.point3 = temp.point4 = temp.maxpoint;
+         for (Option_pet option : temp.op) {
+             if (option.id >= 23 && option.id <= 26) option.param = 128;
+-            else if (option.maxdam > 0) option.param = option.maxdam;
++            else if (option.maxdam > 0 && id != ID_LAN) option.param = option.maxdam;
+         }
+         return temp;
+     }
+@@ -265,6 +274,8 @@
+             return 4768;
+         } else if (type == 14) {
+             return ID_CAT;
++        } else if (type == 15) {
++            return ID_LAN;
+         }
+         return 2943;
+ 
+--- a/src/main/java/template/ItemSellCoin.java
++++ b/src/main/java/template/ItemSellCoin.java
+@@ -198,7 +198,7 @@
+         java.util.Map<Short, ItemSellCoin> offers = new java.util.LinkedHashMap<>();
+         for (ItemSellCoin offer : entry) offers.putIfAbsent(offer.id, offer);
+         for (ItemTemplate3 template : ItemTemplate3.item) {
+-            if ((cosmetic(template.getType()) || template.getId() == client.Pet.ID_CAT)
++            if ((cosmetic(template.getType()) || template.getId() == client.Pet.ID_CAT || template.getId() == client.Pet.ID_LAN)
+                     && !offers.containsKey(template.getId())) {
+                 ItemSellCoin offer = new ItemSellCoin();
+                 offer.id = template.getId();
+@@ -303,6 +303,8 @@
+                 data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[62,10000],[63,5000]]"; break;
+             case 4711:
+                 data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[15,1000],[37,1],[108,1]]"; break;
++            case 4707:
++                data = "[[7,500],[8,500],[9,500],[10,500],[11,500],[15,1500],[27,100],[128,500]]"; break;
+             case 4714: case 4715:
+                 data = "[[7,1000],[8,1000],[9,1000],[10,1000],[11,1000],[27,3000]]"; break;
+             case 4740:
+--- a/src/main/java/template/OfflineSkins.java
++++ b/src/main/java/template/OfflineSkins.java
+@@ -30,7 +30,7 @@
+     }
+     private static final Set<Integer> ORIGINAL_WEAPON_EFFECTS = Set.of(61, 62, 63, 64, 76, 77, 96, 97, 112);
+     private static final Set<Integer> REMOVED = Set.of(4849, 4854, 4855, 4858, 4861, 4862);
+-    private static final Set<Integer> VERIFIED_OPTIONS = Set.of(4633, 4634, 4755);
++    private static final Set<Integer> VERIFIED_OPTIONS = Set.of(4633, 4634, 4707, 4755);
+     public static boolean removed(int id) { return REMOVED.contains(id); }
+     public static short nativeHair(Player player) {
+         Item3 hair = player.item.wear[16];
+@@ -148,6 +148,7 @@
+                 for (Option option : template.getOp()) item.op.add(new Option(option.id, option.getParam(0)));
+             }
+         }
++        if (item.id == 4848) return;
+         if (item.type != EquippedEffects.LANTERN_TYPE && (item.id < 4807 || item.id > 4813)) return;
+         item.part = template.getPart();
+         for (Option current : template.getOp()) {
+--- a/src/main/java/template/EquippedEffects.java
++++ b/src/main/java/template/EquippedEffects.java
+@@ -15,6 +15,21 @@
+     public static final int AURA_SLOT = 20;
+ 
+     private EquippedEffects() {}
++
++    public static boolean hasPigBalloon(Player player) {
++        Item3 balloon = player.item.wear[LANTERN_SLOT];
++        return balloon != null && balloon.id == 4848;
++    }
++
++    public static boolean pigWithButterfly(Player player) {
++        Item3 wing = player.item.wear[14];
++        return hasPigBalloon(player) && wing != null && wing.id == 4822;
++    }
++
++    public static int pigGoldBonus(Player player) {
++        Item3 outfit = player.item.wear[11];
++        return hasPigBalloon(player) && outfit != null && (outfit.id == 4793 || outfit.id == 4794) ? 300 : 0;
++    }
+ 
+     public static void send(Player viewer, Player wearer) throws IOException {
+         display(viewer, wearer, wearer.item.wear[LANTERN_SLOT], 0);
+--- a/src/main/java/map/LeaveItemMap.java
++++ b/src/main/java/map/LeaveItemMap.java
+@@ -65,7 +65,7 @@
+ 				if (ef != null) {
+ 					vang_drop += (vang_drop * (ef.param / 100)) / 100;
+ 				}
+-				vang_drop += vang_drop * p.body.total_item_param(52) / 10_000;
++				vang_drop += vang_drop * (p.body.total_item_param(52) + template.EquippedEffects.pigGoldBonus(p)) / 10_000;
+ 				map.item_map[index_item_map].quantity = (short) Math.min(Short.MAX_VALUE, vang_drop);
+ 				map.item_map[index_item_map].category = 4;
+ 				map.item_map[index_item_map].idmaster = (short) p.id;
+--- a/src/main/java/map/MapService.java
++++ b/src/main/java/map/MapService.java
+@@ -2287,6 +2287,7 @@
+                 || Map.is_khu_2(map) || Map.is_khu_2(p.map) || Map.is_khu_2(p0.map)) {
+             return;
+         }
++        if (map.ld == null && p.typepk == 0 && template.EquippedEffects.pigWithButterfly(p0)) return;
+         // Đệ tử đang luyện không được PK
+         if (p.is_detu_training) {
+             return;
