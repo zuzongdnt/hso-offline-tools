@@ -35,6 +35,11 @@ public class Offline28Check {
         }
         Item3 legacy=new Item3();legacy.type=16;legacy.tier=15;
         check(legacy.optionValue(new Option(77,5))==5000,"Old saved medal duration display");
+        for(int id=4870;id<=4872;id++){
+            ItemTemplate3 cosmetic=new ItemTemplate3();cosmetic.setId((short)id);
+            cosmetic.setType((byte)(id==4872?21:25));cosmetic.setOp(new ArrayList<>());
+            check(ItemSellCoin.cosmeticOptions(cosmetic).isEmpty(),"Unverified stats were added to an imported cosmetic");
+        }
         ItemTemplate3 costume=ItemTemplate3.item.get(4100);costume.setType((byte)15);
         ItemSellCoin offer=new ItemSellCoin();offer.id=4100;offer.color=5;offer.op=new ArrayList<>();ItemSellCoin.entry.add(offer);
         Buyer buyer=new Buyer(new Capture());buyer.point_active[2]=299;

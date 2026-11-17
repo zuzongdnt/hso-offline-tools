@@ -13,6 +13,7 @@
 - Về làng: mục tại NPC bảng xếp hạng hoặc chat `/velang`. Trong Lôi đài thì rời trận; khi đang ở phó bản/chiến trường cần rời hoạt động trước.
 - PC: bỏ giới hạn ở lệnh đặt FPS và xóa khóa đường đi khi nhận map. Chưa đo FPS/CPU trên máy người dùng; không tuyên bố đã hết lag.
 - Theo xác nhận của người dùng, nhập skin gậy mã 174 từ cache của bản đang mở vào phần hiển thị gậy 4869: giữ đủ 144 khung hoạt ảnh gốc, tạo đủ bốn độ phóng đại và icon từ cùng tài nguyên. Các chỉ số của món giữ cấu hình hiện có; chưa triển khai proc Quáng Tuyết.
+- Thêm Tóc vàng (mã hình 168, vật phẩm 4870), Tóc đỏ (171, vật phẩm 4871) và Mặt nạ băng (191, vật phẩm 4872) theo lựa chọn của người dùng. Có đủ bốn độ phóng đại và khung hoạt ảnh gốc (72/144/72 khung). Ba món ở shop skin Lôi đài; không tự gán chỉ số chiến đấu khi chưa có bảng gốc.
 
 ## Kiểm tra
 

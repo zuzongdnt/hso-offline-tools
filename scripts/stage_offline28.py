@@ -22,6 +22,8 @@ def edit(name, old, new):
     path.write_text(source.replace(old, new), encoding='utf-8')
 
 edit('core/OfflineTools.java', 'VERSION = 27;', 'VERSION = 28;')
+edit('template/ItemSellCoin.java', '    public static List<Option> cosmeticOptions(ItemTemplate3 template) {', '''    public static List<Option> cosmeticOptions(ItemTemplate3 template) {
+        if (template.getId() >= 4870 && template.getId() <= 4872) return new ArrayList<>();''')
 edit('template/ItemSellCoin.java', '''        switch (template.getId()) {
             case 4634:''', '''        switch (template.getId()) {
             case 4737:
