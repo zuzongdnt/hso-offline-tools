@@ -13,6 +13,12 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 
 Repo không chứa client/tài nguyên game, database nhân vật, tài khoản thật hoặc khóa ký APK. Cần chuẩn bị các đầu vào đó ở máy của bạn trong thư mục `inputs/` đã được bỏ qua bởi Git.
 
+## Offline 28
+
+Chi tiết sửa và các phần còn thiếu ở [OFFLINE28_TIEN_DO.md](OFFLINE28_TIEN_DO.md). Mrs Oda có shop skin bằng điểm; NPC bảng xếp hạng có danh sách bot, Top thi đấu và Về làng. Có thể chat `/velang`. PC mặc định không giới hạn FPS.
+
+`scripts/stage_offline28.py --source build/server-offline27-release --out build/server-offline28` tạo mã server mới. Tài nguyên Hiệp sĩ Mộng Mơ được đóng gói bằng `scripts/package_offline28_assets.py`. PC dùng thêm `pc/RepairPatcher` trên DLL bản 27. iOS dùng nhánh `offline28-build` ở repo build riêng và IPA build 16.
+
 ## Offline 27
 
 `scripts/stage_offline27.py` tạo mã server 27 từ mã server 23 đã chuẩn bị ở `build/server-offline23`. Bản này giữ người bán mề đay +6 đến +10; mề đay +15 chỉ ở Mở Ly. Android chờ server offline sẵn sàng trước khi nối game để tránh lỗi kết nối lúc mở. Chi tiết đã kiểm tra và việc còn lại ở [OFFLINE27_TIEN_DO.md](OFFLINE27_TIEN_DO.md).

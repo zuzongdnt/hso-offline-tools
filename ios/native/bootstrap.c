@@ -127,7 +127,7 @@ static void prepareDiagnosticLog(void) {
     fclose(log);
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    fprintf(stderr, "[HSO] build=14 offline=26 pid=%d os=%s\n", getpid(), NSProcessInfo.processInfo.operatingSystemVersionString.UTF8String);
+    fprintf(stderr, "[HSO] build=16 offline=28 pid=%d os=%s\n", getpid(), NSProcessInfo.processInfo.operatingSystemVersionString.UTF8String);
 }
 
 static UIWindow *gameWindow(void) {

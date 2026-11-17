@@ -8,8 +8,7 @@
     :outfit
     iget-byte v1, p0, LGameObjects/MainObject;->typeMount:B
     if-ltz v1, :unmounted
-    const/16 v2, 0x18
-    if-lt v1, v2, :reset
+    goto :reset
     :unmounted
     iget v1, p0, LGameObjects/MainObject;->Action:I
     if-nez v1, :reset

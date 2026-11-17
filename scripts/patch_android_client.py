@@ -52,6 +52,14 @@ def patch(folder):
     midlet.write_text(text,encoding='utf-8')
     reader=next(folder.glob('smali*/netcommand/global/ReadMessenge.smali'))
     text=reader.read_text(encoding='utf-8')
+    map_start = '.method public changeMap(Lnet/Message;)V\n    .locals 13\n'
+    assert text.count(map_start) == 1
+    text = text.replace(map_start, map_start + '''
+    const/4 v0, 0x0
+    sput-boolean v0, LGameObjects/Player;->isLockKey:Z
+    const/4 v0, 0x1
+    sput-boolean v0, LGameObjects/Player;->isSendMove:Z
+''')
     for line in (314, 5556, 5578, 5636, 5651):
         pattern=rf'(\.line {line}\b(?:(?!\.line).)*?)readByte\(\)B'
         text,count=re.subn(pattern,r'\1readShort()S',text,count=1,flags=re.S)
@@ -128,6 +136,10 @@ def patch(folder):
     return v0
     :native_body_frame
 ''')
+    # Costume data now has all native phases; keep the original frame selector.
+    begin = text.index('    iget-short v0, p0, LGameObjects/MainObject;->idBody:S', text.index(body_frame))
+    end = text.index('    :native_body_frame\n', begin) + len('    :native_body_frame\n')
+    text = text[:begin] + text[end:]
     actor.write_text(text,encoding='utf-8')
     config_tab=next(folder.glob('smali*/InterfaceComponents/TabConfig.smali'))
     text=config_tab.read_text(encoding='utf8')
@@ -258,7 +270,7 @@ def patch(folder):
         strings.write_text(text,encoding='utf-8')
     info=folder/'apktool.yml'
     text=info.read_text(encoding='utf-8')
-    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','239'),('versionName','4.0.3-offline.27')]:
+    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','240'),('versionName','4.0.3-offline.28')]:
         text,count=re.subn(r'(?m)^(\s*'+key+r':).*$',lambda m:m[1]+' '+value,text)
         assert count==1,'Missing APK build setting '+key
     info.write_text(text,encoding='utf-8')

@@ -28,8 +28,7 @@
     ldrsb w8, [x20, #0x323]
     cmp w8, #0
     b.lt unmounted
-    cmp w8, #24
-    b.lt reset
+    b reset
 unmounted:
     ldr w8, [x20, #0x160]
     cbnz w8, reset
@@ -117,7 +116,7 @@ normal_player:
 // EYE HOOK
     ldrh w8, [x1, #0x2ce]
     sub w8, w8, #253
-    cmp w8, #1
+    cmp w8, #3
     b.hi normal_eye
     b 0x2ad89c
 normal_eye:

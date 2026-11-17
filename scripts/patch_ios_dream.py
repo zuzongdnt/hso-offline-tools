@@ -70,21 +70,6 @@ def patch_ios_dream(client: bytes) -> bytes:
         '''))
     body_frame = mounts + 0x80
     blocks.append((body_frame, body_frame + 0x60, '''
-        ldrh w8, [x1, #0x2ce]
-        sub w8, w8, #253
-        cmp w8, #1
-        b.hi native_body
-        ldr w8, [x1, #0x164]
-        cmp w8, #2
-        mov w9, #2
-        csel w8, w8, w9, lo
-        ldr w9, [x1, #0x1c8]
-        mov w10, #6
-        udiv w11, w9, w10
-        msub w9, w11, w10, w9
-        madd w0, w8, w10, w9
-        ret
-    native_body:
         sub sp, sp, #0x10
         b 0x2a80a8
     '''))

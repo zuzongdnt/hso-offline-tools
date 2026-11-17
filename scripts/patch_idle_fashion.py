@@ -49,9 +49,9 @@ def patch_idle_fashion(text):
     result = result.replace(eye, """    :pswitch_2
     iget-short v1, p0, LGameObjects/MainObject;->idBody:S
     const/16 v2, 0xfd
-    if-eq v1, v2, :offline_dream_eye
-    const/16 v2, 0xfe
-    if-ne v1, v2, :offline_default_eye
+    if-lt v1, v2, :offline_default_eye
+    const/16 v2, 0x100
+    if-gt v1, v2, :offline_default_eye
     :offline_dream_eye
     return v0
     :offline_default_eye
