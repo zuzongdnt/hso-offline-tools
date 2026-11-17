@@ -5,7 +5,7 @@ on:
       runner:
         type: choice
         default: macos-15
-        options: [macos-15, macos-26]
+        options: [macos-15, macos-26, macos-15-intel]
       source_sha:
         description: Private source commit being built
         required: true
@@ -32,7 +32,7 @@ jobs:
         with:
           graalvm: '22.1.0.1-Final'
           jdk: java17
-          arch: aarch64
+          arch: ${{ contains(inputs.runner, '-intel') && 'x86_64' || 'aarch64' }}
       - name: Build embedded library
         working-directory: native-source
         run: mvn -B -DskipTests package gluonfx:sharedlib

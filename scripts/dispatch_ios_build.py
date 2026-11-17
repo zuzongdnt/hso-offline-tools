@@ -1,12 +1,11 @@
 """Build a private source revision on the public standard Mac runner without storing a PAT there."""
 import argparse
-import json
 import shutil
 import subprocess
 import urllib.error
 import urllib.request
 
-p=argparse.ArgumentParser();p.add_argument('--ref',required=True);p.add_argument('--runner',choices=['macos-15','macos-26'],default='macos-15');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--ref',required=True);p.add_argument('--runner',choices=['macos-15','macos-26','macos-15-intel'],default='macos-15');a=p.parse_args()
 gh=shutil.which('gh') or r'C:\Program Files\GitHub CLI\gh.exe'
 private='zuzongdnt/hso-ios-offline-build';public='zuzongdnt/hso-offline-tools'
 commit=subprocess.check_output([gh,'api',f'repos/{private}/commits/{a.ref}','--jq','.sha'],text=True).strip()
