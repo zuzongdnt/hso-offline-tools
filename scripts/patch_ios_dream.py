@@ -73,6 +73,20 @@ def patch_ios_dream(client: bytes) -> bytes:
         sub sp, sp, #0x10
         b 0x2a80a8
     '''))
+    parts = body_frame + 0x60
+    blocks.append((parts, parts + 0x60, '''
+        ldrh w8, [x1, #0x2ce]
+        sub w8, w8, #255
+        cmp w8, #1
+        b.hi native_parts
+        mov w0, #-1
+        cmp w2, #1
+        csel w0, wzr, w0, eq
+        ret
+    native_parts:
+        stp x20, x19, [sp, #-0x20]!
+        b 0x2ad748
+    '''))
     for offset, limit, assembly in blocks:
         if limit > text_bounds:
             raise ValueError("No room for iOS mount renderer")
@@ -87,6 +101,7 @@ def patch_ios_dream(client: bytes) -> bytes:
         (0x2AD8B0, "20b841b9", EYE),   # MainObject.getTypePart: eye
         (0x2A85E4, "f85fbca9", HAIR),  # MainObject.getEffMatNa
         (0x2A80A4, "ff4300d1", body_frame),  # MainObject.getFrameBody
+        (0x2AD744, "f44fbea9", parts),  # MainObject.getTypePart: preserve the rear mount layer
     ):
         if client[offset:offset + 4] != bytes.fromhex(expected):
             raise ValueError(f"Unexpected original iOS dream hook at {offset:#x}")

@@ -1,6 +1,23 @@
 // AAPCS64 RoboVM arguments: env, actor, graphics, paintName.
 // The reserved zero-fill table has 128 slots, each 32 bytes long.
 // Store an inverted actor address so the timer never roots an actor in Boehm GC.
+    ldrh w11, [x1, #0x2ce]
+    ldrsb w8, [x1, #0x323]
+    cmp w8, #0
+    b.lt check_dismount
+    sub w12, w11, #253
+    cmp w12, #1
+    b.hi body_ready
+    add w11, w11, #2
+    b store_body
+check_dismount:
+    sub w12, w11, #255
+    cmp w12, #1
+    b.hi body_ready
+    sub w11, w11, #2
+store_body:
+    strh w11, [x1, #0x2ce]
+body_ready:
     adrp x9, 0x1c1e000
     lsr x10, x1, #4
     eor x10, x10, x1, lsr #13

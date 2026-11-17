@@ -11,6 +11,26 @@ def patch_idle_fashion(text):
     body = match[0]
     insert = re.search(r'    \.locals \d+\n', body).end()
     body = body[:insert] + """
+    move-object/from16 v2, p0
+    iget-short v0, v2, LGameObjects/MainObject;->idBody:S
+    iget-byte v1, v2, LGameObjects/MainObject;->typeMount:B
+    if-ltz v1, :offline_dream_dismount
+    const/16 v1, 0xfd
+    if-lt v0, v1, :offline_dream_body_ready
+    const/16 v1, 0xfe
+    if-gt v0, v1, :offline_dream_body_ready
+    add-int/lit8 v0, v0, 0x2
+    goto :offline_store_dream_body
+    :offline_dream_dismount
+    const/16 v1, 0xff
+    if-lt v0, v1, :offline_dream_body_ready
+    const/16 v1, 0x100
+    if-gt v0, v1, :offline_dream_body_ready
+    add-int/lit8 v0, v0, -0x2
+    :offline_store_dream_body
+    int-to-short v0, v0
+    iput-short v0, v2, LGameObjects/MainObject;->idBody:S
+    :offline_dream_body_ready
     invoke-direct/range {p0 .. p1}, LGameObjects/MainObject;->offlineDream(LCLib/mGraphics;)Z
     move-result v0
     if-eqz v0, :offline_normal_player
@@ -44,6 +64,23 @@ def patch_idle_fashion(text):
     :offline_load_effect
 """, result)
     assert count == 1
+    part = '.method public getTypePart(I)I\n    .locals 3\n'
+    assert result.count(part) == 1
+    result = result.replace(part, part + '''
+    iget-short v0, p0, LGameObjects/MainObject;->idBody:S
+    const/16 v1, 0xff
+    if-lt v0, v1, :offline_native_parts
+    const/16 v1, 0x100
+    if-gt v0, v1, :offline_native_parts
+    const/4 v0, 0x1
+    if-ne p1, v0, :offline_no_mounted_part
+    const/4 v0, 0x0
+    return v0
+    :offline_no_mounted_part
+    const/4 v0, -0x1
+    return v0
+    :offline_native_parts
+''')
     eye = '    :pswitch_2\n    iget p1, p0, LGameObjects/MainObject;->eye:I'
     assert result.count(eye) == 1
     result = result.replace(eye, """    :pswitch_2

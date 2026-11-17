@@ -1,5 +1,6 @@
-param([Parameter(Mandatory=$true)][string]$GameRoot)
+﻿param([Parameter(Mandatory=$true)][string]$GameRoot)
 $ErrorActionPreference='Stop'
+$env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 $GameRoot=(Resolve-Path -LiteralPath $GameRoot).Path
 $package=Join-Path $PSScriptRoot 'payload'
 $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'files.json') -Raw | ConvertFrom-Json
@@ -14,8 +15,19 @@ foreach($file in $manifest.files){
     if((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine [string]$file.sha256){throw ('File cập nhật bị hỏng: '+$relative)}
 }
 $client=Join-Path $GameRoot 'client/hso_v403.exe'
+$launcher=Join-Path $GameRoot 'CHOI_OFFLINE.ps1'
+$launchers=Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -in @('powershell.exe','pwsh.exe') -and $_.CommandLine -and
+    $_.CommandLine.IndexOf($launcher,[StringComparison]::OrdinalIgnoreCase) -ge 0
+}
 $running=Get-Process hso_v403 -ErrorAction SilentlyContinue | Where-Object Path -eq $client
 foreach($game in $running){[void]$game.CloseMainWindow();if(-not $game.WaitForExit(15000)){throw 'Hãy thoát game rồi chạy cập nhật lại.'}}
+# The old launcher also shuts down the server/database after the client exits.
+# Finish that shutdown before new PID files are written by the restarted game.
+foreach($old in $launchers){
+    $process=Get-Process -Id $old.ProcessId -ErrorAction SilentlyContinue
+    if($process -and -not $process.WaitForExit(20000)){throw 'Game đang lưu dữ liệu. Hãy thử cập nhật lại sau.'}
+}
 & (Join-Path $GameRoot 'TAT_SERVER.ps1')
 $runtime=(Resolve-Path -LiteralPath (Join-Path $GameRoot 'runtime')).Path
 $deadline=(Get-Date).AddSeconds(15)

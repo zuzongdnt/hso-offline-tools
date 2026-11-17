@@ -29,7 +29,7 @@ public final class IosWorld {
             extract(bundle.resolve("offline-cosmetics.zip"), root, false);
             Files.createFile(marker);
         }
-        Path cosmetics = root.resolve(".cosmetics-ios-v28");
+        Path cosmetics = root.resolve(".cosmetics-ios-v29");
         if (!Files.exists(cosmetics)) {
             extract(bundle.resolve("offline-cosmetics.zip"), root, false);
             Files.createFile(cosmetics);

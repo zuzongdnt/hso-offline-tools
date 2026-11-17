@@ -81,7 +81,7 @@ public final class OfflineEngine {
         if (startupError != null) throw new IOException("Máy chủ Offline không khởi động được.", startupError);
     }
     private static void installCosmetics(Activity activity, File root) throws IOException {
-        File marker = new File(root, ".cosmetics-v28");
+        File marker = new File(root, ".cosmetics-v29");
         if (marker.isFile()) return;
         boolean present = java.util.Arrays.asList(activity.getAssets().list("")).contains("offline-cosmetics.zip");
         if (!present) return;

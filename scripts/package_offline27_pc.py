@@ -31,6 +31,7 @@ with ZipFile(args.previous) as previous:
     replacements = {
         'payload/' + server_name: args.server.read_bytes(),
         'payload/offline-version.txt': str(args.version).encode(),
+        'payload/CAP_NHAT_TU_DONG.ps1': (Path(__file__).resolve().parents[1] / 'pc/CAP_NHAT_TU_DONG.ps1').read_text(encoding='utf-8-sig').encode('utf-8-sig'),
     }
     if args.client:
         replacements['payload/client/hso_v403_Data/Managed/Assembly-CSharp.dll'] = args.client.read_bytes()
@@ -55,7 +56,7 @@ with ZipFile(args.previous) as previous:
         for name, data in replacements.items():
             new_manifest['files'].append(dict(path=name.removeprefix('payload/'), sha256=hashlib.sha256(data).hexdigest()))
             output.writestr(name, data)
-        output.writestr('CAP_NHAT.ps1', previous.read('CAP_NHAT.ps1'))
+        output.writestr('CAP_NHAT.ps1', (Path(__file__).resolve().parents[1] / 'pc/CAP_NHAT.ps1').read_text(encoding='utf-8-sig').encode('utf-8-sig'))
         output.writestr('files.json', json.dumps(new_manifest, ensure_ascii=False, indent=2).encode())
 with ZipFile(args.out) as result:
     if result.testzip() is not None:

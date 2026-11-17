@@ -17,7 +17,7 @@ public class Offline27Check {
         Player player = new Player(session, 30000);
         player.item = new Item(player);
         player.item.wear = new Item3[24];
-        check(player.gemHitThreshold(402) == 0, "No Khải Hoàn gem must never activate");
+        check(player.gemHitThreshold(387) == 0, "No Khải Hoàn gem must never activate");
         player.process_khai_hoan_hit();
         check(player.hit_count_ngoc_khai_hoan == 0, "No-gem hit counter changed");
 
@@ -28,11 +28,12 @@ public class Offline27Check {
         weapon.op.add(new Option(60, 385));
         player.item.wear[0] = weapon;
         check(player.gemHitThreshold(382) == 16, "Mixed Hỗn Nguyên sockets should average to 16 hits");
-        check(player.gemHitThreshold(402) == 0, "Different gem must not count as Khải Hoàn");
-        weapon.op.set(0, new Option(58, 402));
-        check(player.gemHitThreshold(402) == 25, "Level 1 Khải Hoàn needs 25 hits");
-        weapon.op.set(1, new Option(59, 406));
-        check(player.gemHitThreshold(402) == 15, "Khải Hoàn sockets should average 25 and 5 hits");
+        check(player.gemHitThreshold(387) == 0, "Different gem must not count as Khải Hoàn");
+        weapon.op.set(0, new Option(58, 387));
+        check(player.gemHitThreshold(387) == 25, "Level 1 Khải Hoàn needs 25 hits");
+        weapon.op.set(1, new Option(59, 391));
+        check(player.gemHitThreshold(387) == 15, "Khải Hoàn sockets should average 25 and 5 hits");
+        check(player.gemHitThreshold(402) == 0, "Sinh Mệnh must never count as Khải Hoàn");
 
         Item3 tinhTuWeapon = new Item3();
         tinhTuWeapon.id = 4672;

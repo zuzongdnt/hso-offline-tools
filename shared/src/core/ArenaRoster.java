@@ -17,11 +17,12 @@ public final class ArenaRoster {
             io.Session session = new io.Session(null);
             Player model = new Player(session, 31900); model.level = (short) level;
             for (int i = 0; i < 5; i++) {
-                Player bot = LoiDai.createOpponent(model, 31000 + bots.size());
-                bot.name = new String[]{"Thiên Vũ", "Hàn Phong", "Bạch Nguyệt", "Lạc Vũ", "Xích Long"}[i] + " " + level + " [Bot]";
+                Player bot = LoiDai.createOpponent(model, 31000 + bots.size(), level + i);
+                bot.name = new String[]{"Thiên Vũ", "Hàn Phong", "Bạch Nguyệt", "Lạc Vũ", "Xích Long"}[i] + " " + bot.level + " [Bot]";
                 bots.add(bot);
             }
         }
+        bots.sort(java.util.Comparator.comparingInt((Player bot) -> bot.level).reversed());
     }
     public static synchronized Player find(String name) {
         return bots.stream().filter(bot -> bot.name.equalsIgnoreCase(name)).findFirst().orElse(null);
@@ -47,7 +48,7 @@ public final class ArenaRoster {
         init(p); page = Math.max(0, Math.min(page, (bots.size() - 1) / 8)); pages.put(p.id,page);
         List<String> labels = new ArrayList<>();
         for (int i=page*8; i<Math.min(bots.size(),page*8+8);i++) {
-            Player bot=bots.get(i); labels.add(bot.name+" · Lv "+bot.level+" · Online");
+            Player bot=bots.get(i); labels.add("Top "+(i+1)+" · "+bot.name+" · Lv "+bot.level);
         }
         labels.add("Trang trước"); labels.add("Trang sau");
         MenuController.send_menu_select(p.conn,12002,labels.toArray(new String[0]));
@@ -71,10 +72,11 @@ public final class ArenaRoster {
             int lower=p.level<55?50:55+(p.level-55)/10*10;
             int upper=p.level<55?64:Math.min(139,lower+9);
             if(bot.level<lower || bot.level>upper){Service.send_notice_box(p.conn,"Hãy chọn bot trong nhóm cấp "+lower+"-"+upper+".");return;}
-            Player fresh=LoiDai.createOpponent(bot,29999);
+            Player fresh=LoiDai.createOpponent(bot,29999,bot.level);
             fresh.name=bot.name; fresh.level=bot.level;fresh.clazz=bot.clazz;
             fresh.point1=bot.point1;fresh.point2=bot.point2;fresh.point3=bot.point3;fresh.point4=bot.point4;
             fresh.item.wear=bot.item.wear.clone();fresh.fashion=bot.fashion.clone();fresh.skill_point=bot.skill_point.clone();
+            fresh.mypet=new ArrayList<>(bot.mypet);fresh.pet_follow=bot.pet_follow;
             fresh.load_skill(); fresh.hp=fresh.body.get_max_hp();fresh.mp=fresh.body.get_max_mp();
             LoiDai.start(p,fresh);
         } else if(index==2)show(p,pages.getOrDefault(p.id,0));

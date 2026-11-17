@@ -119,7 +119,7 @@ for path in source.rglob("*.java"):
         if text.count(map_ack) != 1:
             raise ValueError("Expected one client map acknowledgement handler")
         text = text.replace(map_ack, map_ack + '\n                System.out.println("IOS_CLIENT_MAP_READY map=" + conn.p.map.map_id);')
-    if path.relative_to(source).as_posix() == "map/Map.java":
+    if path.relative_to(source).as_posix() == "map/Map.java" and "offline.MapScheduler.schedule(this, delay)" not in text:
         text = text.replace("private final Thread mapthread;", "private java.util.concurrent.ScheduledFuture<?> mapthread;\n    private long nextWorldUpdate;")
         text = text.replace("private boolean running;", "private volatile boolean running;")
         text = text.replace("this.mapthread = new Thread(this);", "this.mapthread = null;")

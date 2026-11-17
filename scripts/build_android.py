@@ -8,6 +8,7 @@ p=argparse.ArgumentParser()
 for name in ['apk','server','source','world','apktool','sdk','jdk','keystore']:
     p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--cosmetics',type=Path)
+p.add_argument('--client-base',type=Path,help='Reuse a previously patched client when its world/cosmetic assets match.')
 p.add_argument('--alias',default='offline')
 p.add_argument('--out',type=Path,default=repo/'build/android')
 a=p.parse_args()
@@ -21,12 +22,20 @@ buildtools=sorted((a.sdk/'build-tools').iterdir(),key=lambda x:tuple(map(int,re.
 android=a.sdk/'platforms/android-36/android.jar'
 if not android.is_file():raise SystemExit('Install Android SDK Platform 36.')
 decoded=a.out/'decoded'
-run(java,'-jar',a.apktool,'d','-f',a.apk,'-o',decoded)
-patch(decoded)
-shutil.copy2(a.world,decoded/'assets/offline-world.zip')
-if a.cosmetics: shutil.copy2(a.cosmetics,decoded/'assets/offline-cosmetics.zip')
 base=a.out/'client-base.apk'
-run(java,'-jar',a.apktool,'b','-f',decoded,'-o',base)
+if a.client_base:
+    import hashlib
+    with zipfile.ZipFile(a.client_base) as previous:
+        for name,path in [('offline-world.zip',a.world),('offline-cosmetics.zip',a.cosmetics)]:
+            if path and hashlib.sha256(previous.read('assets/'+name)).digest()!=hashlib.sha256(path.read_bytes()).digest():
+                raise ValueError('Reused client has different '+name)
+    shutil.copy2(a.client_base,base)
+else:
+    run(java,'-jar',a.apktool,'d','-f',a.apk,'-o',decoded)
+    patch(decoded)
+    shutil.copy2(a.world,decoded/'assets/offline-world.zip')
+    if a.cosmetics: shutil.copy2(a.cosmetics,decoded/'assets/offline-cosmetics.zip')
+    run(java,'-jar',a.apktool,'b','-f',decoded,'-o',base)
 sources=list((repo/'android/src').rglob('*.java'))
 for name in ['Util','Log']:
     text=(a.source/'src/main/java/core'/f'{name}.java').read_text(encoding='utf-8')

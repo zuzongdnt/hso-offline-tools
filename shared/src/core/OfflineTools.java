@@ -161,8 +161,12 @@ public final class OfflineTools {
                 Path game = root().toAbsolutePath().normalize().getParent();
                 Path updater = game.resolve("CAP_NHAT_TU_DONG.ps1");
                 if (!Files.isRegularFile(updater)) throw new IOException("Thiếu công cụ cập nhật PC.");
+                Files.createDirectories(game.resolve("logs"));
                 new ProcessBuilder("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-                        "-File", updater.toString(), "-GameRoot", game.toString()).start();
+                        "-File", updater.toString(), "-GameRoot", game.toString())
+                        .redirectErrorStream(true)
+                        .redirectOutput(ProcessBuilder.Redirect.appendTo(game.resolve("logs/updater-process.log").toFile()))
+                        .start();
                 respond(socket, 200, "text/plain; charset=utf-8", "Đã mở trình cập nhật PC. Xác nhận trong cửa sổ HSO Offline.");
             } else {
                 respond(socket, 403, "text/plain; charset=utf-8", "Yêu cầu không hợp lệ. Mở lại trang Dữ liệu.");

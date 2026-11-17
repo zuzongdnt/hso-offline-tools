@@ -96,11 +96,6 @@ public final class SaveTransfer {
 
     public static void replace(Connection connection, String text) throws Exception {
         JSONObject tables = validate(text);
-        Map<String, String> localPasswords = new LinkedHashMap<>();
-        try (Statement statement = connection.createStatement();
-                ResultSet result = statement.executeQuery("SELECT `user`, `pass` FROM `account`")) {
-            while (result.next()) localPasswords.put(result.getString(1), result.getString(2));
-        }
         // The caller owns a real transaction and invokes this before loading any players.
         for (var entry : TABLES.entrySet()) {
             String table = entry.getKey();
@@ -115,10 +110,6 @@ public final class SaveTransfer {
                 for (Object value : (JSONArray) tables.get(table)) {
                     JSONArray row = (JSONArray) value;
                     for (int i = 0; i < row.size(); i++) statement.setString(i + 1, (String) row.get(i));
-                    if (table.equals("account")) {
-                        String user = (String) row.get(1);
-                        if (localPasswords.containsKey(user)) statement.setString(3, localPasswords.get(user));
-                    }
                     statement.executeUpdate();
                 }
             }

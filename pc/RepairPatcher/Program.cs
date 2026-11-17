@@ -42,10 +42,13 @@ foreach (var i in new[] {
 }) paintIl.InsertBefore(paintStart,i);
 var part = actor.Methods.Single(m => m.Name == "getTypePart");
 var partIl = part.Body.GetILProcessor(); var partStart = part.Body.Instructions[0];
+var hideParts = partIl.Create(OpCodes.Ldc_I4_M1);
 foreach(var i in new[] {
     partIl.Create(OpCodes.Ldarg_0),partIl.Create(OpCodes.Ldfld,body),partIl.Create(OpCodes.Ldc_I4,255),partIl.Create(OpCodes.Blt,partStart),
     partIl.Create(OpCodes.Ldarg_0),partIl.Create(OpCodes.Ldfld,body),partIl.Create(OpCodes.Ldc_I4,256),partIl.Create(OpCodes.Bgt,partStart),
-    partIl.Create(OpCodes.Ldc_I4_M1),partIl.Create(OpCodes.Ret)
+    partIl.Create(OpCodes.Ldarg_1),partIl.Create(OpCodes.Ldc_I4_1),partIl.Create(OpCodes.Bne_Un,hideParts),
+    partIl.Create(OpCodes.Ldc_I4_0),partIl.Create(OpCodes.Ret),
+    hideParts,partIl.Create(OpCodes.Ret)
 }) partIl.InsertBefore(partStart,i);
 int fps = 0;
 foreach (var type in module.Types)
