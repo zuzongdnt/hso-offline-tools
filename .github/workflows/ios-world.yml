@@ -1,0 +1,51 @@
+name: Build iOS offline library
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: macos-15
+        options: [macos-15, macos-26]
+      source_sha:
+        description: Private source commit being built
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  world:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Download temporary private source archive
+        env:
+          HSO_SOURCE_URL: ${{ secrets.HSO_IOS_SOURCE_URL }}
+        run: |
+          test -n "$HSO_SOURCE_URL"
+          curl --fail --location --silent --show-error "$HSO_SOURCE_URL" --output source.zip
+          mkdir source
+          unzip -q source.zip -d source
+          mv source/* native-source
+      - uses: gluonhq/setup-graalvm@3a9b11a45ef0ecad69107f5884b5dbbb7b806e1c
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          graalvm: '22.1.0.1-Final'
+          jdk: java17
+          arch: aarch64
+      - name: Build embedded library
+        working-directory: native-source
+        run: mvn -B -DskipTests package gluonfx:sharedlib
+      - name: Verify arm64 library
+        run: |
+          library="$(find native-source/target/gluonfx -name '*.dylib' -type f | head -n 1)"
+          test -n "$library"
+          lipo "$library" -verify_arch arm64
+          if nm -u "$library" | grep -q '_JVM_'; then exit 1; fi
+          mkdir artifact
+          cp "$library" artifact/HSOOfflineWorld.dylib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-offline-world
+          path: artifact/HSOOfflineWorld.dylib
+          retention-days: 7
