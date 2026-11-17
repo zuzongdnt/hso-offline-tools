@@ -7,3 +7,10 @@
 - File `.hsosave` PC kiểm tra SHA-256 hợp lệ; đã nhập hai bản lưu PC vào bản sao SQLite tách biệt bằng lớp SQL iOS và so khớp đủ bốn bảng. Việc giữ mật khẩu thiết bị đích trong `SaveTransfer.replace` làm mật khẩu PC không được phục hồi khi trùng tên tài khoản.
 
 Mã dịch ngược và ảnh đối chiếu nằm ở thư mục riêng trên máy, không đưa vào Git.
+# Offline 30 — các mốc đã kiểm tra
+
+- Client PC `ReadMessenge.List_Serverz` dùng list type 6 để hiện nút Thách đấu; type 1 chỉ là bảng top thường. `List_Server` gửi action 0 và tên đối thủ qua packet -101. Xem trang bị trong danh sách này yêu cầu packet 49 type 100.
+- Nhánh đăng nhập Chơi mới lần đầu gửi `1/1` và trước đây luôn tạo tài khoản mới. Cần chọn tài khoản vừa nhập trước nhánh này, ngoài việc nối lại tên tài khoản tự động đã lưu.
+- Profile Cá chép đầu tiên là 24; bảng DY_CHAR_MOVE có 12 số, sáu số đầu dành cho hai hướng ngang. Chỉnh cả ba pha mỗi hướng về 29; các hướng dọc giữ nguyên.
+- Hoạt ảnh 112_30 / 112_32 / 112_24 có đủ PNG và metadata trong bộ tài nguyên đã cung cấp; ý nghĩa Lục Bảo / Sinh Mệnh / Lú lẫn được người dùng xác nhận. Chưa mở rộng bảng ý nghĩa cho các ID khác.
+- Item4 241 là vé mê cung, 242 là Đèn Thần, 243 là gói vé. Map native 74–79 có hai cửa và các thần canh cửa 149/155. Item3 tai nghe native 4718/4719 là type 26, part 98/99; món nhập thêm 4845 đang có part 0. Chưa có ánh xạ hình hợp lệ, không gán tùy ý sang hiệu ứng khác.

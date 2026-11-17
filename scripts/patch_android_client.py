@@ -270,7 +270,7 @@ def patch(folder):
         strings.write_text(text,encoding='utf-8')
     info=folder/'apktool.yml'
     text=info.read_text(encoding='utf-8')
-    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','241'),('versionName','4.0.3-offline.29')]:
+    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','242'),('versionName','4.0.3-offline.30')]:
         text,count=re.subn(r'(?m)^(\s*'+key+r':).*$',lambda m:m[1]+' '+value,text)
         assert count==1,'Missing APK build setting '+key
     info.write_text(text,encoding='utf-8')

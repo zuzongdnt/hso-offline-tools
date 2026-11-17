@@ -9,6 +9,18 @@ import map.MapService;
 /** Native -49/2 effect packets: animation ID is separate from the full actor ID. */
 public final class CombatVisuals {
     private CombatVisuals() {}
+    public static void mob(Player attacker,map.Mob_in_map mob,int effect,int time)throws IOException {
+        if(mob.hp<=0)return;
+        mob.confusedUntil=System.currentTimeMillis()+time;
+        int zoom=Math.max(1,Math.min(4,attacker.conn.zoomlv));
+        byte[] raw=Util.loadfile("data/part_char/imgver/x"+zoom+"/112_"+effect);
+        int start=4+ByteBuffer.wrap(raw).getInt(),size=raw.length-start;
+        if(start<4||size<=0||size>32767)throw new IOException("Invalid monster effect");
+        Message packet=new Message(-49);packet.writer().writeByte(2);packet.writer().writeShort(size);packet.writer().write(raw,start,size);
+        packet.writer().writeByte(0);packet.writer().writeByte(0);packet.writer().writeByte(effect);
+        packet.writer().writeShort(mob.index);packet.writer().writeByte(1);packet.writer().writeByte(0);packet.writer().writeInt(time);
+        MapService.send_msg_player_inside(attacker.map,attacker,packet,true);packet.cleanup();
+    }
     public static void show(Player player,int effect,int time)throws IOException {
         if(effect==17 && player.get_eff(-204)!=null){invisible(player,time);return;}
         send(player,effect,0,time,false);

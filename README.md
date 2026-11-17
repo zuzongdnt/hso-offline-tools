@@ -13,6 +13,14 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 
 Repo không chứa client/tài nguyên game, database nhân vật, tài khoản thật hoặc khóa ký APK. Cần chuẩn bị các đầu vào đó ở máy của bạn trong thư mục `inputs/` đã được bỏ qua bởi Git.
 
+## Offline 30
+
+[Phạm vi bản 30 và các phần chưa hoàn tất](OFFLINE30_TIEN_DO.md). Sửa chọn nhân vật khi khôi phục, hiệu ứng 30/32/24, Top thách đấu độc lập với điểm Lôi đài, mề shop, lối vào chiến trường và vé mê cung.
+
+Chuẩn bị server bằng `python scripts/stage_offline30.py --source build/server-offline29-release --out build/server-offline30`. Tạo overlay bằng `python scripts/package_offline30_assets.py --previous inputs/offline29-cosmetics.zip --out build/offline30-cosmetics.zip`. PC giữ DLL bản 29 và dùng `scripts/package_offline27_pc.py --version 30`; Android versionCode 242. iOS dùng `scripts/prepare_ios_server.py`, nguồn riêng nhánh `offline30-build`, IPA build 18.
+
+Nếu runner của repo riêng bị chặn hạn mức, có workflow thủ công `.github/workflows/ios-world.yml` dùng runner tiêu chuẩn của repo công khai. `python scripts/dispatch_ios_build.py --ref offline30-build` tạo liên kết tải mã riêng tạm thời trong Actions secret, không lưu PAT vào repo công khai. Có thể chọn `--runner macos-26` hoặc `--runner macos-15-intel`; bản Intel biên dịch chéo sang iOS arm64. Liên kết có thời hạn, cần dispatch lại nếu hết hạn trong hàng chờ. Chỉ artifact thư viện được tải lên; không tải mã riêng, tài nguyên game hay file sao lưu vào artifact.
+
 ## Offline 29
 
 [Chi tiết bản 29 và phạm vi kiểm tra](OFFLINE29_TIEN_DO.md). Sửa cập nhật PC và khôi phục tài khoản; thêm shop Lôi đài có icon với 10 skin, bot cao nhất cấp 139, hiệu ứng ngọc và sự kiện Đứa Bé/đệ tử. `/velang` về làng, `/detu` tìm Đứa Bé và mở lựa chọn nhận.

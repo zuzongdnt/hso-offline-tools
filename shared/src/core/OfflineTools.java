@@ -42,12 +42,14 @@ public final class OfflineTools {
         try {
             if (Files.size(pending) > SaveTransfer.LIMIT) throw new IOException("File vượt quá 32 MB.");
             String text = new String(Files.readAllBytes(pending), StandardCharsets.UTF_8);
-            SaveTransfer.validate(text);
+            JSONObject restored = SaveTransfer.validate(text);
             Files.write(backups.resolve("before-import-" + stamp + ".hsosave"),
                     SQL.gI().exportSave().getBytes(StandardCharsets.UTF_8));
             SQL.gI().importSave(text);
+            String selectedAccount = OfflineLogin.remember(restored);
             Files.move(pending, backups.resolve("imported-" + stamp + ".hsosave"));
-            Files.write(root().resolve("restore-result.txt"), "Khôi phục dữ liệu thành công.".getBytes(StandardCharsets.UTF_8));
+            Files.write(root().resolve("restore-result.txt"), ("Khôi phục thành công. Tài khoản được chọn: " + selectedAccount
+                    + ". Mở lại game và bấm Chơi mới để vào tài khoản vừa khôi phục; Đổi tài khoản vẫn dùng thông tin trong file.").getBytes(StandardCharsets.UTF_8));
             System.out.println("HSO_SAVE_IMPORTED " + stamp);
         } catch (Exception error) {
             Files.move(pending, backups.resolve("rejected-" + stamp + ".hsosave"));

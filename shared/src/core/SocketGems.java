@@ -81,7 +81,7 @@ public final class SocketGems {
         int chance=stats(p)[2];if(chance==0||p.get_eff(-213)!=null||!TinhTu.rolls(chance))return;
         p.add_eff(-213,10,3000);
         if(has(p,2,false))p.add_eff(-216,1,3000);
-        visual(p,20,3000);
+        visual(p,30,3000);
     }
     private static void visual(Player p,int effect,int duration){
         try{CombatVisuals.show(p,effect,duration);}catch(IOException error){System.err.println("Socket visual: "+error.getMessage());}
@@ -97,7 +97,7 @@ public final class SocketGems {
             long amount=p.body.get_max_hp()*heal.param/10000;Service.usepotion(p,0,amount);
         }
         if(p.get_eff(-214)==null&&TinhTu.rolls(values[6])){
-            p.add_eff(-214,50,3000);if(has(p,4,false))p.add_eff(-215,20,3000);visual(p,29,3000);
+            p.add_eff(-214,50,3000);if(has(p,4,false))p.add_eff(-215,20,3000);visual(p,32,3000);
         }
         if(p.get_eff(-210)!=null)damage*=2;
         if(p.get_eff(-214)!=null){if(bossOrPlayer&&monster)damage=damage*150/100;else if(monster&&p.get_eff(-215)!=null)damage=damage*80/100;}
