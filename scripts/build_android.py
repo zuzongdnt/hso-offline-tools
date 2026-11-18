@@ -41,8 +41,13 @@ else:
     if a.lite: (decoded/'assets/offline-lite').write_text('2',encoding='ascii')
     run(java,'-jar',a.apktool,'b','-f',decoded,'-o',base)
 sources=list((repo/'android/src').rglob('*.java'))
-for name in ['Util','Log']:
-    text=(a.source/'src/main/java/core'/f'{name}.java').read_text(encoding='utf-8')
+server_core=a.source/'src/main/java/core'
+compat_sources=['Util','Log']
+if (server_core/'OfflineLogin.java').is_file():
+    compat_sources.append('OfflineLogin')
+for name in compat_sources:
+    text=(server_core/f'{name}.java').read_text(encoding='utf-8')
+    text=text.replace('java.nio.file.Path.of(', 'java.nio.file.Paths.get(')
     text=text.replace('new FileInputStream(url)','new FileInputStream(new java.io.File(System.getProperty("hso.root"),url))')
     text=text.replace('new File(path)','new File(System.getProperty("hso.root"),path)')
     text=re.sub(r'random\.nextInt\(a1,\s*a2\)','a1 + random.nextInt(a2 - a1)',text)
