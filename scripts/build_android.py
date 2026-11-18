@@ -8,6 +8,7 @@ p=argparse.ArgumentParser()
 for name in ['apk','server','source','world','apktool','sdk','jdk','keystore']:
     p.add_argument('--'+name,type=Path,required=True)
 p.add_argument('--cosmetics',type=Path)
+p.add_argument('--lite',action='store_true',help='Use x1/x2 client assets and a compatible offline world.')
 p.add_argument('--client-base',type=Path,help='Reuse a previously patched client when its world/cosmetic assets match.')
 p.add_argument('--alias',default='offline')
 p.add_argument('--out',type=Path,default=repo/'build/android')
@@ -24,6 +25,8 @@ if not android.is_file():raise SystemExit('Install Android SDK Platform 36.')
 decoded=a.out/'decoded'
 base=a.out/'client-base.apk'
 if a.client_base:
+    if a.lite:
+        raise ValueError('Lite requires rebuilding the client with the zoom cap.')
     import hashlib
     with zipfile.ZipFile(a.client_base) as previous:
         for name,path in [('offline-world.zip',a.world),('offline-cosmetics.zip',a.cosmetics)]:
@@ -32,9 +35,10 @@ if a.client_base:
     shutil.copy2(a.client_base,base)
 else:
     run(java,'-jar',a.apktool,'d','-f',a.apk,'-o',decoded)
-    patch(decoded)
+    patch(decoded, lite=a.lite)
     shutil.copy2(a.world,decoded/'assets/offline-world.zip')
     if a.cosmetics: shutil.copy2(a.cosmetics,decoded/'assets/offline-cosmetics.zip')
+    if a.lite: (decoded/'assets/offline-lite').write_text('2',encoding='ascii')
     run(java,'-jar',a.apktool,'b','-f',decoded,'-o',base)
 sources=list((repo/'android/src').rglob('*.java'))
 for name in ['Util','Log']:
@@ -61,6 +65,7 @@ unsigned=a.out/'unsigned.apk'
 with zipfile.ZipFile(base) as src,zipfile.ZipFile(unsigned,'w',zipfile.ZIP_DEFLATED) as dst:
     indices=[1 if name=='classes.dex' else int(re.fullmatch(r'classes(\d+)\.dex',name)[1]) for name in src.namelist() if re.fullmatch(r'classes\d*\.dex',name)]
     for item in src.infolist():
+        if a.lite and item.filename.startswith(('assets/x3/', 'assets/x4/')):continue
         if not item.filename.startswith('META-INF/'):dst.writestr(item,src.read(item.filename))
     number=max(indices)+1
     for file in sorted(dex.glob('*.dex')):dst.write(file,'classes'+str(number)+'.dex');number+=1

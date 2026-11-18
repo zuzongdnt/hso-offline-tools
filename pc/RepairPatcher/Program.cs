@@ -1,8 +1,28 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-if (args.Length != 2 || Path.GetFullPath(args[0]) == Path.GetFullPath(args[1])) throw new ArgumentException("input output");
+if (args.Length is < 2 or > 3 || Path.GetFullPath(args[0]) == Path.GetFullPath(args[1])) throw new ArgumentException("input output [--inventory]");
 using var module = ModuleDefinition.ReadModule(args[0]);
 TypeDefinition T(string name) => module.Types.Single(t => t.Name == name);
+if (args.Length == 3)
+{
+    if (args[2] != "--inventory") throw new ArgumentException("Expected --inventory");
+    var tab = T("TabShopNew");
+    var pointer = tab.Methods.Single(m => m.Name == "updatePointer");
+    var pointerIl = pointer.Body.GetILProcessor();
+    var selected = tab.Fields.Single(f => f.Name == "idSelect");
+    var page = tab.Fields.Single(f => f.Name == "currentTab");
+    var compare = pointer.Body.Instructions.First(i => i.OpCode == OpCodes.Ldfld && i.Operand == selected).Next;
+    if (compare.OpCode != OpCodes.Bne_Un) throw new InvalidOperationException("Unexpected touch comparison");
+    foreach (var instruction in new[] {
+        pointerIl.Create(OpCodes.Ldarg_0), pointerIl.Create(OpCodes.Ldfld, page),
+        pointerIl.Create(OpCodes.Ldc_I4_S, (sbyte)42), pointerIl.Create(OpCodes.Mul), pointerIl.Create(OpCodes.Sub)
+    }) pointerIl.InsertBefore(compare, instruction);
+    var invalidSlot = pointer.Body.Instructions.Single(i => i.OpCode == OpCodes.Ldc_I4_S && (sbyte)i.Operand == 126);
+    invalidSlot.OpCode = OpCodes.Ldc_I4_M1;
+    invalidSlot.Operand = null;
+    module.Write(args[1]);
+    return;
+}
 var player = T("Player");
 var changeMap = T("ReadMessenge").Methods.Single(m => m.Name == "changeMap");
 var il = changeMap.Body.GetILProcessor();

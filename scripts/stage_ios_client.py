@@ -23,7 +23,7 @@ def call_arm64(offset: int, target: int) -> bytes:
     return struct.pack("<I", 0x94000000 | (((target - offset) // 4) & 0x03FFFFFF))
 
 
-def patch_client(original: bytes) -> bytes:
+def patch_client(original: bytes, *, lite: bool = False) -> bytes:
     if original[:8] != bytes.fromhex("cffaedfe0c000001"):
         raise ValueError("Expected the arm64 IOSLauncher from the Tailscale v2 IPA.")
 
@@ -48,6 +48,16 @@ def patch_client(original: bytes) -> bytes:
     for offset in (0x9194F8, 0x936920, 0x936CC8, 0x937498, 0x937B10):
         edits.append((offset, call_arm64(offset, 0x6EC288), call_arm64(offset, 0x6EC63C)))
         edits.append((offset + 4, bytes.fromhex("081c0013"), bytes.fromhex("083c0013")))
+    # TabShopNew.updatePointer: compare against the selected cell on every page.
+    # mov w10,#42; msub w8,w9,w10,w8; nop
+    edits.append((0x375958, bytes.fromhex("0aa900513f0500714801881a"),
+                  bytes.fromhex("4a05805228a10a1b1f2003d5")))
+    # The old page-4 special case cleared valid slot 126.
+    edits.append((0x375A3C, bytes.fromhex("e1000054"), bytes.fromhex("07000014")))
+    if lite:
+        # checkZoomLevel keeps its x1/x2 cases and caps higher resolutions at x2.
+        edits.extend((offset, bytes.fromhex(expected), bytes.fromhex("e1031f32"))
+                     for offset, expected in ((0x6E0B2C, "e1070032"), (0x6E0B34, "e1031e32")))
     # Log exceptions that Skill_List otherwise silently catches. x0 is the
     # caught Throwable here; printStackTrace receives the VM env and Throwable.
     edits.append((0x929658, bytes.fromhex("e06700f9e86740f9e86300f9"),

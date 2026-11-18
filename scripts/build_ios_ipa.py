@@ -217,6 +217,7 @@ def main():
     parser.add_argument("--cosmetics", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--build", default="9")
+    parser.add_argument("--lite", action="store_true", help="Use x1/x2 assets and a compatible offline world")
     parser.add_argument("--dream-fashion", action="store_true", help="Enable the native iOS dream costume renderer")
     args = parser.parse_args()
     if args.out.exists():
@@ -232,7 +233,7 @@ def main():
         if "hso.sqlite" not in world.namelist() or "hso.conf" not in world.namelist():
             parser.error("World archive is missing its database or configuration.")
     with ZipFile(args.ipa) as source:
-        executable = patch_client(source.read(CLIENT))
+        executable = patch_client(source.read(CLIENT), lite=args.lite)
         executable = hide_top_up_menu(executable)
         if args.dream_fashion:
             from patch_ios_dream import patch_ios_dream
@@ -255,6 +256,8 @@ def main():
         })
         with ZipFile(pending, "x", ZIP_DEFLATED) as output:
             for entry in source.infolist():
+                if args.lite and entry.filename.startswith((BUNDLE + "res/x3/", BUNDLE + "res/x4/")):
+                    continue
                 if "/_CodeSignature/" in entry.filename or entry.filename.endswith("/embedded.mobileprovision"):
                     continue
                 if entry.filename.startswith(LEGACY_FILES):
@@ -273,6 +276,8 @@ def main():
             output.writestr(library_entry, native)
             output.write(args.world, BUNDLE + "offline/offline-world.zip", compress_type=ZIP_STORED)
             output.write(args.cosmetics, BUNDLE + "offline/offline-cosmetics.zip", compress_type=ZIP_STORED)
+            if args.lite:
+                output.writestr(BUNDLE + "offline/offline-lite", "2")
     with ZipFile(pending) as output:
         if output.testzip() is not None:
             raise ValueError("Output IPA archive failed integrity verification.")

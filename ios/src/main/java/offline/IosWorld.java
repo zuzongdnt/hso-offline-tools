@@ -35,6 +35,7 @@ public final class IosWorld {
             Files.createFile(cosmetics);
         }
         System.setProperty("hso.root", root.toAbsolutePath().toString());
+        if (Files.isRegularFile(bundle.resolve("offline-lite"))) System.setProperty("hso.assets.max2", "true");
         SQL.gI();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         new Thread(() -> {

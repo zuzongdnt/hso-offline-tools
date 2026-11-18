@@ -4,7 +4,7 @@ from pathlib import Path
 
 MIN_SDK = 29
 
-def patch(folder):
+def patch(folder, *, lite=False):
     session=next(folder.glob('smali*/CLib/Session_ME.smali'))
     text=session.read_text(encoding='utf-8')
     pattern=r'(\.method public connect\(Ljava/lang/String;I\)V\n\s*\.locals \d+\n)(.*?)(\.end method)'
@@ -87,7 +87,40 @@ def patch(folder):
     text,count=re.subn(r'(sget-short (\w+), LGameObjects/Player;->maxInven:S)(\s+div-int/2addr)',
                        r'\1\n\n    add-int/lit8 \2, \2, 0x29\3',text)
     assert count == 2, 'Missing inventory tab page calculations'
+    old_page = '''    if-ne v11, v1, :cond_8
+
+    add-int/lit8 v3, v3, -0x2a
+
+    :cond_8'''
+    new_page = '''    mul-int/lit8 v11, v11, 0x2a
+
+    sub-int/2addr v3, v11'''
+    assert text.count(old_page) == 1, 'Unexpected inventory touch comparison'
+    text = text.replace(old_page, new_page)
+    last_reset = '''    :cond_f
+    const/4 v4, 0x3
+
+    if-ne v3, v4, :cond_10
+
+    .line 2132
+    iget v3, p0, LInterfaceComponents/TabShopNew;->idSelect:I
+
+    const/16 v4, 0x7e
+
+    if-ne v3, v4, :cond_10
+
+    .line 2133
+    iput v10, p0, LInterfaceComponents/TabShopNew;->idSelect:I'''
+    assert text.count(last_reset) == 1, 'Unexpected inventory slot-126 reset'
+    text = text.replace(last_reset, '    :cond_f')
     tab.write_text(text,encoding='utf-8')
+    if lite:
+        canvas = next(folder.glob('smali*/com/silverbat/knightage/TemCanvas.smali'))
+        source = canvas.read_text(encoding='utf-8')
+        zoom = re.search(r'(?ms)^\.method private checkZoomLevel\(II\)V.*?^\.end method', source)
+        assert zoom and all(zoom[0].count(f'const/4 v0, 0x{level}') == 1 for level in (3, 4))
+        capped = zoom[0].replace('const/4 v0, 0x3', 'const/4 v0, 0x2').replace('const/4 v0, 0x4', 'const/4 v0, 0x2')
+        canvas.write_text(source[:zoom.start()] + capped + source[zoom.end():], encoding='utf-8')
     actor=next(folder.glob('smali*/GameObjects/MainObject.smali'))
     text=actor.read_text(encoding='utf-8')
     draw_skin='    invoke-virtual/range {v1 .. v6}, LGameObjects/DataSkillEff;->paintTopWeaPon(LCLib/mGraphics;IIII)V'
@@ -270,7 +303,7 @@ def patch(folder):
         strings.write_text(text,encoding='utf-8')
     info=folder/'apktool.yml'
     text=info.read_text(encoding='utf-8')
-    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','242'),('versionName','4.0.3-offline.30')]:
+    for key,value in [('minSdkVersion',str(MIN_SDK)),('versionCode','244'),('versionName','4.0.3-offline.32')]:
         text,count=re.subn(r'(?m)^(\s*'+key+r':).*$',lambda m:m[1]+' '+value,text)
         assert count==1,'Missing APK build setting '+key
     info.write_text(text,encoding='utf-8')

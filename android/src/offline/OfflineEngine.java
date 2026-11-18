@@ -51,6 +51,8 @@ public final class OfflineEngine {
                 }
                 installCosmetics(activity, root);
                 System.setProperty("hso.root",root.getAbsolutePath());
+                if (java.util.Arrays.asList(activity.getAssets().list("")).contains("offline-lite"))
+                    System.setProperty("hso.assets.max2", "true");
                 final java.util.concurrent.atomic.AtomicReference<Throwable> serverError=new java.util.concurrent.atomic.AtomicReference<>();
                 new Thread(()->{try{core.Start.main(new String[0]);}catch(Throwable e){serverError.set(e);android.util.Log.e("HSOOffline","Server failed",e);}},"HSO-Offline-Server").start();
                 boolean ready=false;
