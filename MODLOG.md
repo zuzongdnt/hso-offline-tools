@@ -14,3 +14,9 @@ Mã dịch ngược và ảnh đối chiếu nằm ở thư mục riêng trên m
 - Profile Cá chép đầu tiên là 24; bảng DY_CHAR_MOVE có 12 số, sáu số đầu dành cho hai hướng ngang. Chỉnh cả ba pha mỗi hướng về 29; các hướng dọc giữ nguyên.
 - Hoạt ảnh 112_30 / 112_32 / 112_24 có đủ PNG và metadata trong bộ tài nguyên đã cung cấp; ý nghĩa Lục Bảo / Sinh Mệnh / Lú lẫn được người dùng xác nhận. Chưa mở rộng bảng ý nghĩa cho các ID khác.
 - Item4 241 là vé mê cung, 242 là Đèn Thần, 243 là gói vé. Map native 74–79 có hai cửa và các thần canh cửa 149/155. Item3 tai nghe native 4718/4719 là type 26, part 98/99; món nhập thêm 4845 đang có part 0. Chưa có ánh xạ hình hợp lệ, không gán tùy ý sang hiệu ứng khác.
+
+## Offline 36
+
+- PNG x1 trong JAR 1.8.3 trùng từng pixel với bộ Offline ở các mã 12–20, 22–23, 42 và 45. Mã 54 có ảnh khác giữa hai bản. HSONTC xác nhận Bỏng lạnh 12, Bỏng lửa 13, Lú lẫn 14, Khiên ma thuật 15 và Ngọc Lục bảo 20. Bản 36 dùng ảnh 22 cho Khải hoàn theo ảnh từ Zuzong.
+- `ReadMessenge.objectMove` nhận byte 127 để chạy hiệu ứng đẩy lùi. `DataSkillEff` dùng cờ di chuyển 1 để khóa chân và cờ 17 để tàng hình. `EffFormServer` ánh xạ loại 5 sang hiệu ứng đóng băng 100 trong một bảng mã riêng.
+- Hình địa hình và minimap của map 36 khớp ảnh thách đấu. Map 102 là Lôi đài thường. Hai điểm bắt đầu của mỗi map nằm trên ô có thể đi.
