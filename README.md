@@ -13,6 +13,12 @@ Mã sửa và công cụ build bản HSO offline độc lập trên Windows và 
 
 Repo không chứa client/tài nguyên game, database nhân vật, tài khoản thật hoặc khóa ký APK. Cần chuẩn bị các đầu vào đó ở máy của bạn trong thư mục `inputs/` đã được bỏ qua bởi Git.
 
+## Offline 31
+
+Sửa trạng thái tàng hình tồn tại quá hạn ở Lôi đài và gói tin hiển thị lính canh ở Chiến trường. Khu giao tranh có tám bot chia bốn phe. Chúng đi theo ô đất, tìm mục tiêu khác phe và hồi sinh sau khi bị hạ.
+
+Chuẩn bị server bằng `python scripts/stage_offline31.py --source build/server-offline30 --out build/server-offline31`. Sau khi build server, [đóng gói JAR Lite](java-j2me/README.md) bằng `--compact` và gói tài nguyên bản 30 qua `--cosmetics`.
+
 ## Offline 30
 
 [Phạm vi bản 30 và các phần chưa hoàn tất](OFFLINE30_TIEN_DO.md). Sửa chọn nhân vật khi khôi phục, hiệu ứng 30/32/24, Top thách đấu độc lập với điểm Lôi đài, mề shop, lối vào chiến trường và vé mê cung.

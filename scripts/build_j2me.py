@@ -19,6 +19,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for key in ['client', 'server', 'source', 'world', 'sdk', 'jdk', 'asm', 'out']:
         p.add_argument('--' + key, type=Path, required=True)
+    p.add_argument('--cosmetics', type=Path)
+    p.add_argument('--compact', action='store_true', help='Keep x1 artwork only. Requires offline31 or later.')
     a = p.parse_args()
     if a.out.exists():
         raise SystemExit('Output exists; use a new --out directory to preserve previous builds.')
@@ -83,12 +85,29 @@ def main():
         config = src.read('hso.conf').decode('utf-8-sig')
         for key, value in [('port', '19149'), ('mysql-user', 'offline'), ('mysql-host', '127.0.0.1'), ('mysql-database', 'offline'), ('mysql-password', 'offline')]:
             config = re.sub(r'(?m)^' + key + r':.*$', key + ': ' + value, config)
+        def keep(name):
+            return not a.compact or re.match(r'^data/(?:icon|part_char|part_char/imgver)/x[234]/', name) is None
+        overlay = {}
+        if a.cosmetics:
+            with zipfile.ZipFile(a.cosmetics) as assets:
+                for item in assets.infolist():
+                    name = item.filename
+                    if not name.startswith('data/') or '..' in Path(name).parts:
+                        raise ValueError('Expected a data-only overlay')
+                    if not item.is_dir() and keep(name):
+                        overlay[name] = assets.read(item)
+        if a.compact:
+            overlay['data/j2me-x1'] = b'1'
         with zipfile.ZipFile(world, 'w', zipfile.ZIP_DEFLATED) as dst:
             for item in src.infolist():
+                if not keep(item.filename) or item.filename in overlay:
+                    continue
                 if item.filename == 'hso.conf':
                     dst.writestr(item.filename, config)
                 else:
                     dst.writestr(item, src.read(item.filename))
+            for name, data in overlay.items():
+                dst.writestr(name, data)
     engine_bytes = (dex / 'classes.dex').read_bytes()
     with zipfile.ZipFile(output, 'a') as dst:
         for f in bootstrap.rglob('*.class'):

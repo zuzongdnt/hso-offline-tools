@@ -24,10 +24,12 @@ python scripts/build_j2me.py --client inputs/KnightOnline_v403.jar --server buil
 
 Kết quả: `build/java-j2me/HSO_Java_Offline_Zuzong.jar` và `SHA256.txt`. Luôn chọn `--out` mới. Script giữ nguyên file client đầu vào và kiểm tra hash sau khi build.
 
+Với server Offline 31, thêm `--compact --cosmetics inputs/offline30-cosmetics.zip` để tạo JAR Lite. JAR mẫu build riêng còn 12,2 MB, dùng bộ hình x1 và cùng bản đồ, database mẫu, bộ xử lý thế giới offline. Client Java có ba trang hành trang, mỗi trang 42 ô.
+
 ## Mở trên điện thoại
 
 1. Cài [J2ME Loader](https://github.com/nikita36078/J2ME-Loader/releases/tag/1.8.2).
-2. Chuẩn bị khoảng 1 GB bộ nhớ trống. Chép JAR sang điện thoại. Trong J2ME Loader, bấm dấu cộng, chọn file JAR và chờ cài đặt.
+2. Chép JAR sang điện thoại. Trong J2ME Loader, bấm dấu cộng, chọn file JAR và chờ cài đặt. Nếu đã cài bản Java Offline Zuzong, bấm **INSTALL** khi trình cài hỏi có cài lại và giữ dữ liệu hay không.
 3. Bấm **START**, giữ màn hình game `240 × 320` trong lần thử đầu, rồi bấm **START** lần nữa.
 4. Chờ chuẩn bị thế giới ở lần chạy đầu. File game lớn vì chứa dữ liệu thế giới offline.
 5. Bấm **Chơi Tiếp: javaoff**, tạo nhân vật và vào game.

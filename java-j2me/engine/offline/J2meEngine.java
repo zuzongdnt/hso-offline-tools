@@ -12,7 +12,9 @@ import java.util.zip.*;
 public final class J2meEngine {
     public static synchronized void start(Context context, File root, InputStream world) throws Exception {
         File complete = new File(root, ".ready-v1");
-        if (!complete.isFile()) {
+        File resources = new File(root, ".resources-offline31");
+        boolean fresh = !complete.isFile();
+        if (fresh || !resources.isFile()) {
             if (!root.isDirectory() && !root.mkdirs()) throw new IOException("Không tạo được thư mục lưu.");
             try (ZipInputStream zip = new ZipInputStream(world)) {
                 ZipEntry entry; byte[] buffer = new byte[65536];
@@ -21,19 +23,25 @@ public final class J2meEngine {
                     if (!target.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator))
                         throw new IOException("Invalid world path");
                     if (entry.isDirectory()) { target.mkdirs(); continue; }
+                    if (!fresh && !entry.getName().startsWith("data/")) continue;
                     target.getParentFile().mkdirs();
                     try (FileOutputStream out = new FileOutputStream(target)) {
                         int n; while ((n = zip.read(buffer)) != -1) out.write(buffer, 0, n);
                     }
                 }
             }
-            try (SQLiteDatabase db = SQLiteDatabase.openDatabase(new File(root, "hso.sqlite").toString(), null, SQLiteDatabase.OPEN_READWRITE)) {
+            if (fresh) {
+                try (SQLiteDatabase db = SQLiteDatabase.openDatabase(new File(root, "hso.sqlite").toString(), null, SQLiteDatabase.OPEN_READWRITE)) {
                 // This is a new, empty offline world, separate from APK, PC and online saves.
                 db.execSQL("INSERT OR IGNORE INTO account (id,user,pass,char,status,`lock`,coin,phone,ip,tiennap,pass2,tongnap,checkmocnap) VALUES (1,'javaoff','offline','[]',1,0,0,'','127.0.0.1',0,'',0,'[]')");
+                }
+                if (!complete.createNewFile()) throw new IOException("Không ghi được trạng thái cài game.");
             }
-            if (!complete.createNewFile()) throw new IOException("Không ghi được trạng thái cài game.");
+            if (!resources.createNewFile() && !resources.isFile()) throw new IOException("Không lưu được phiên bản tài nguyên.");
         } else world.close();
         System.setProperty("hso.root", root.getAbsolutePath());
+        System.setProperty("hso.client.j2me", "true");
+        if (new File(root, "data/j2me-x1").isFile()) System.setProperty("hso.assets.x1", "true");
         AtomicReference<Throwable> failure = new AtomicReference<>();
         new Thread(() -> { try { core.Start.main(new String[0]); }
             catch (Throwable e) { failure.set(e); android.util.Log.e("HSOJavaOffline", "Startup", e); }

@@ -1,4 +1,12 @@
-# Kiểm tra bản Java offline 1.0.0
+# Kiểm tra bản Java offline
+
+## Offline 31 Lite
+
+Ngày 18/11/2026, trình J2ME Loader 1.8.2 trên giả lập Android 14 cài JAR Lite, mở thế giới nội bộ và tạo nhân vật khi tắt cả Wi-Fi lẫn dữ liệu di động. Sau khi cài đè bản sửa gói tin thông tin nhân vật, nhân vật thử vẫn còn và vào được bản đồ mở đầu. Trên bản đồ hiển thị nhân vật, NPC và địa hình.
+
+Bản Lite dùng gói hình x1 và dung lượng khoảng 12,2 MB. Kiểm tra máy chủ bao phủ việc hiển thị lại bot hết tàng hình, định dạng tin lính canh và tin di chuyển của bot Chiến trường. Chưa chơi hết trận Lôi đài hoặc Chiến trường trên J2ME Loader và chưa thử JAR Lite trên điện thoại thật.
+
+## Bản Java 1.0.0
 
 Ngày kiểm tra: 06/11/2026, múi giờ Việt Nam.
 
