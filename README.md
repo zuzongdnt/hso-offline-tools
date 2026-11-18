@@ -15,9 +15,9 @@ Repo không chứa client/tài nguyên game, database nhân vật, tài khoản 
 
 ## Offline 32
 
-Bản Java dùng đúng độ dài trường số lượng vật phẩm trong hành trang và rương. Client PC, Android và iOS tính vị trí ô đang chọn theo trang. Đồ thời trang dùng chỉ số có sẵn và không thể cường hóa, chuyển hóa cấp cường hóa, đục lỗ hoặc khảm ngọc.
+Bản Java dùng đúng độ dài trường số lượng vật phẩm trong hành trang và rương. Client PC, Android và iOS tính vị trí ô đang chọn theo trang. Đồ thời trang dùng chỉ số có sẵn và không thể cường hóa, chuyển hóa cấp cường hóa, đục lỗ hoặc khảm ngọc. Luồng khôi phục save dùng API đọc và ghi file tương thích Android.
 
-Chuẩn bị server bằng `python scripts/stage_offline32.py --source build/server-offline31 --out build/server-offline32`. Bản PC áp `--inventory` của `pc/RepairPatcher` lên DLL đã vá ở bản 30 hoặc 31. Bản Android và iOS Lite dùng `scripts/compact_mobile_world.py` trên APK/IPA bản 30, sau đó ghép gói kết quả bằng `--lite` của trình build tương ứng. Hai bản Lite giới hạn zoom tài nguyên ở x2.
+Chuẩn bị server bằng `python scripts/stage_offline32.py --source build/server-offline31 --out build/server-offline32`. Bản PC áp `--inventory` của `pc/RepairPatcher` lên DLL đã vá ở bản 30 hoặc 31. Dùng gói thế giới và tài nguyên Offline 30 đầy đủ khi build APK và IPA để giữ các mức zoom x1–x4. Tùy chọn thử nghiệm `--lite` cần gói từ `scripts/compact_mobile_world.py` và giới hạn zoom ở x2.
 
 ## Offline 31
 

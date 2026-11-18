@@ -23,6 +23,12 @@ def edit(file, old, new, count=1):
 
 
 edit('core/OfflineTools.java', 'VERSION = 31;', 'VERSION = 32;')
+edit('core/OfflineLogin.java',
+     'java.nio.file.Files.writeString(preference(),chosen,java.nio.charset.StandardCharsets.UTF_8)',
+     'java.nio.file.Files.write(preference(),chosen.getBytes(java.nio.charset.StandardCharsets.UTF_8))')
+edit('core/OfflineLogin.java',
+     'java.nio.file.Files.readString(preference())',
+     'new String(java.nio.file.Files.readAllBytes(preference()),java.nio.charset.StandardCharsets.UTF_8)')
 edit('client/Item.java', '    public void char_inventory(', '''    private static void writeInventoryCount(Message message, int count) throws IOException {
         // The original MIDlet reads a byte; the patched desktop and mobile clients read a short.
         if (Boolean.getBoolean("hso.client.j2me")) message.writer().writeByte(count);

@@ -25,10 +25,10 @@ if not android.is_file():raise SystemExit('Install Android SDK Platform 36.')
 decoded=a.out/'decoded'
 base=a.out/'client-base.apk'
 if a.client_base:
-    if a.lite:
-        raise ValueError('Lite requires rebuilding the client with the zoom cap.')
     import hashlib
     with zipfile.ZipFile(a.client_base) as previous:
+        if ('assets/offline-lite' in previous.namelist()) != a.lite:
+            raise ValueError('Reused client must have the same zoom cap.')
         for name,path in [('offline-world.zip',a.world),('offline-cosmetics.zip',a.cosmetics)]:
             if path and hashlib.sha256(previous.read('assets/'+name)).digest()!=hashlib.sha256(path.read_bytes()).digest():
                 raise ValueError('Reused client has different '+name)
