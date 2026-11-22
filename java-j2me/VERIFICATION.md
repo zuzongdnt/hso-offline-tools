@@ -1,5 +1,11 @@
 # Kiểm tra bản Java offline
 
+## Offline 37 Lite
+
+- Bản phát hành mang phiên bản MIDlet `37.0.0` và dùng máy chủ Offline 37, bộ hình x1 cùng cơ sở dữ liệu mẫu đã kiểm tra không chứa tài khoản hoặc nhân vật của người chơi.
+- Trên J2ME Loader 1.8.2 và giả lập Android 14, bật chế độ máy bay, tắt Wi-Fi và dữ liệu. Cài đè JAR 32, đọc lại nhân vật thử, vào bản đồ, di chuyển, mở hành trang và mở lại game sau khi đã lưu.
+- Trong lần khởi động đầu sau cập nhật, phải đóng hộp đang kết nối và bấm **Chơi tiếp** lại sau khi thế giới báo sẵn sàng. Chưa thử trên thiết bị thật hoặc trình giả lập Java khác.
+
 ## Offline 31 Lite
 
 Ngày 18/11/2026, trình J2ME Loader 1.8.2 trên giả lập Android 14 cài JAR Lite, mở thế giới nội bộ và tạo nhân vật khi tắt cả Wi-Fi lẫn dữ liệu di động. Sau khi cài đè bản sửa gói tin thông tin nhân vật, nhân vật thử vẫn còn và vào được bản đồ mở đầu. Trên bản đồ hiển thị nhân vật, NPC và địa hình.

@@ -53,8 +53,9 @@ public final class Bootstrap {
                     }
                     DexClassLoader loader = new DexClassLoader(dex.getAbsolutePath(), code.getAbsolutePath(), null, Bootstrap.class.getClassLoader());
                     engine = loader.loadClass("offline.J2meEngine");
-                    engine.getMethod("start", Context.class, File.class, InputStream.class).invoke(null,
-                        context, new File(context.getFilesDir(), "hso-java-offline"), new WorldStream());
+                    String worldId = readText("/offline/world-id.txt").trim();
+                    engine.getMethod("start", Context.class, File.class, InputStream.class, String.class).invoke(null,
+                        context, new File(context.getFilesDir(), "hso-java-offline"), new WorldStream(), worldId);
                     synchronized (Bootstrap.class) { ready = true; Bootstrap.class.notifyAll(); }
                     ui.post(new Runnable() { public void run() { if (progress != null) progress.dismiss(); }});
                 } catch (Throwable error) {

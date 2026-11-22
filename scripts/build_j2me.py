@@ -21,7 +21,10 @@ def main():
         p.add_argument('--' + key, type=Path, required=True)
     p.add_argument('--cosmetics', type=Path)
     p.add_argument('--compact', action='store_true', help='Keep x1 artwork only. Requires offline31 or later.')
+    p.add_argument('--version', type=int, help='Offline release number to record in the MIDlet manifest.')
     a = p.parse_args()
+    if a.version is not None and a.version < 1:
+        p.error('--version must be positive.')
     if a.out.exists():
         raise SystemExit('Output exists; use a new --out directory to preserve previous builds.')
     with zipfile.ZipFile(a.client) as z:
@@ -69,7 +72,8 @@ def main():
     patcher.mkdir()
     run(javac, '-cp', a.asm, '-d', patcher, repo / 'java-j2me/tools/PatchJ2me.java')
     output = a.out / 'HSO_Java_Offline_Zuzong.jar'
-    run(java, '-cp', str(patcher) + os.pathsep + str(a.asm), 'PatchJ2me', a.client, output)
+    version = f'{a.version}.0.0' if a.version is not None else '1.0.0'
+    run(java, '-cp', str(patcher) + os.pathsep + str(a.asm), 'PatchJ2me', a.client, output, version)
 
     # Reject private saves rather than silently packaging an existing character or account.
     world = a.out / 'world.zip'
@@ -109,11 +113,13 @@ def main():
             for name, data in overlay.items():
                 dst.writestr(name, data)
     engine_bytes = (dex / 'classes.dex').read_bytes()
+    world_hash = hashlib.sha256(world.read_bytes()).hexdigest()
     with zipfile.ZipFile(output, 'a') as dst:
         for f in bootstrap.rglob('*.class'):
             dst.write(f, f.relative_to(bootstrap).as_posix(), compress_type=zipfile.ZIP_DEFLATED)
         dst.writestr('offline/engine.bin', engine_bytes, compress_type=zipfile.ZIP_DEFLATED)
         dst.writestr('offline/engine-id.txt', hashlib.sha256(engine_bytes).hexdigest())
+        dst.writestr('offline/world-id.txt', world_hash)
         count = 0
         with world.open('rb') as stream:
             while chunk := stream.read(4 * 1024 * 1024):
@@ -127,7 +133,7 @@ def main():
         digest = hashlib.sha256()
         for i in range(count):
             digest.update(check.read('offline/world-' + str(i) + '.bin'))
-        assert digest.hexdigest() == hashlib.sha256(world.read_bytes()).hexdigest()
+        assert digest.hexdigest() == world_hash
     assert original_hash == hashlib.sha256(a.client.read_bytes()).hexdigest(), 'Original client changed!'
     (a.out / 'SHA256.txt').write_text(hashlib.sha256(output.read_bytes()).hexdigest() + '  ' + output.name + '\n', encoding='utf-8')
     print('Built:', output.resolve())

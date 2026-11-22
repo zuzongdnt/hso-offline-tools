@@ -57,13 +57,13 @@ public final class PatchJ2me implements Opcodes {
         return writer.toByteArray();
     }
     public static void main(String[] args) throws Exception {
-        if (args.length != 2) throw new IllegalArgumentException("input.jar output.jar");
+        if (args.length != 3) throw new IllegalArgumentException("input.jar output.jar version");
         if (Files.exists(Path.of(args[1]))) throw new IOException("Output exists");
         try (JarFile src = new JarFile(args[0])) {
             Manifest mf = src.getManifest();
             mf.getMainAttributes().putValue("MIDlet-Name", "HSO Java Offline Zuzong");
             mf.getMainAttributes().putValue("MIDlet-Vendor", "Zuzong");
-            mf.getMainAttributes().putValue("MIDlet-Version", "1.0.0");
+            mf.getMainAttributes().putValue("MIDlet-Version", args[2]);
             mf.getMainAttributes().putValue("MIDlet-1", "HSO Java Offline Zuzong,/icon.png,com.silverknight.TemMidlet");
             mf.getMainAttributes().putValue("MIDlet-Permissions-Opt", "javax.microedition.io.Connector.socket");
             mf.getMainAttributes().remove(new Attributes.Name("MIDlet-Jar-URL"));

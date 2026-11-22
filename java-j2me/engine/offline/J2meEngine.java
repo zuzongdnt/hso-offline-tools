@@ -10,9 +10,10 @@ import java.util.zip.*;
 
 /** Uses the same patched server and SQLite bridge as the Android offline APK. */
 public final class J2meEngine {
-    public static synchronized void start(Context context, File root, InputStream world) throws Exception {
+    public static synchronized void start(Context context, File root, InputStream world, String worldId) throws Exception {
+        if (!worldId.matches("[a-f0-9]{64}")) throw new IOException("Sai mã dữ liệu thế giới.");
         File complete = new File(root, ".ready-v1");
-        File resources = new File(root, ".resources-offline31");
+        File resources = new File(root, ".resources-" + worldId);
         boolean fresh = !complete.isFile();
         if (fresh || !resources.isFile()) {
             if (!root.isDirectory() && !root.mkdirs()) throw new IOException("Không tạo được thư mục lưu.");

@@ -5,7 +5,7 @@ Biến thể mới từ cùng bản vá server/SQLite của Android và PC trong
 ## Phạm vi
 
 - Một file `.jar` chứa client, bộ xử lý thế giới và dữ liệu ban đầu; không cần chạy server trên PC, VPS hoặc Internet.
-- Dành riêng cho **J2ME Loader trên Android 13 trở lên**. Đây không phải JAR cho điện thoại Java cổ, FreeJ2ME trên R36S hoặc Java SE trên Windows.
+- Dành cho **J2ME Loader trên Android 13 trở lên**. Máy chủ nhúng yêu cầu Android DEX và SQLite, nên JAR này không chạy trên giả lập MIDP thuần, FreeJ2ME trên R36S, Java SE trên Windows hoặc giả lập Java trên iPhone. iPhone có [bản IPA riêng](https://github.com/zuzongdnt/hso-offline-tools/releases/tag/offline-37).
 - Bộ xử lý chạy ngay trong tiến trình game trên Android. Client dùng loopback `127.0.0.1:19149` trên cùng thiết bị.
 - Tài khoản offline mới: `javaoff`, mật khẩu `offline`. Tạo nhân vật trong game; không nhập tài khoản online thật.
 - Dữ liệu nhân vật tách riêng khỏi bản APK/PC. Tự lưu mỗi 15 giây và khi MIDlet pause/thoát bình thường.
@@ -25,6 +25,8 @@ python scripts/build_j2me.py --client inputs/KnightOnline_v403.jar --server buil
 Kết quả: `build/java-j2me/HSO_Java_Offline_Zuzong.jar` và `SHA256.txt`. Luôn chọn `--out` mới. Script giữ nguyên file client đầu vào và kiểm tra hash sau khi build.
 
 Với server Offline 31, thêm `--compact --cosmetics inputs/offline30-cosmetics.zip` để tạo JAR Lite. JAR mẫu build riêng còn 12,2 MB, dùng bộ hình x1 và cùng bản đồ, database mẫu, bộ xử lý thế giới offline. Client Java có ba trang hành trang, mỗi trang 42 ô.
+
+Với server Offline 37, dùng đầu vào server, world sạch và bộ tài nguyên tương ứng bản 37. Thêm `--compact --version 37` để giữ bộ hình x1 và đặt phiên bản MIDlet là `37.0.0`. Khi cài đè, game làm mới tài nguyên theo mã SHA-256 của gói world và giữ cơ sở dữ liệu đã lưu.
 
 ## Mở trên điện thoại
 
